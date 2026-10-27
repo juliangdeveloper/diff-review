@@ -582,7 +582,7 @@ function viewCommit(sha, branch) {
       h("button", { class: "btn approve", type: "button", onclick: () => submitReview(commit, DECISION.APPROVED, form), text: "Aprobar" }),
       h("button", { class: "btn reject", type: "button", onclick: () => submitReview(commit, DECISION.REJECTED, form), text: "Rechazar" }),
       h("button", { class: "btn", type: "button", onclick: () => submitReview(commit, DECISION.COMMENT, form), text: "Comentar" })),
-    h("p", { class: "hint", text: state.auth?.email ? `Se guarda como ${state.auth.email}` : "Se guarda sin revisor." }));
+    h("p", { class: "hint", text: state.auth?.email ? `Se guarda como ${state.auth.email}` : "Se guarda sin correo." }));
   return [
     h("article", { class: "commit-head" },
       h("div", { class: "commit-badges" }, badge(status), h("span", { class: "mono muted", text: shortSha(commit) })),
