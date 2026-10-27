@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.2.1";
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
@@ -24,7 +24,7 @@ export const LEGACY_STORAGE = Object.freeze([
 ]);
 
 export const URLS = Object.freeze({
-  TEMPLATE_XLSX: "plantilla/diff-review-plantilla.xlsx",
+  NEW_SCRIPT: "https://script.new",
   CODE_GS: "apps-script/Code.gs",
 });
 
@@ -48,6 +48,8 @@ export const ERROR = Object.freeze({
   NOT_FOUND: "not_found",
   DECISION: "decision",
   LOCK: "lock",
+  SETUP: "setup",
+  SHEET: "sheet",
   SERVER: "server",
 });
 

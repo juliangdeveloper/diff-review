@@ -1,6 +1,6 @@
 import {
   APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
-  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, REVIEW, ROUTE, STATUS, STORAGE, TAB, URLS,
+  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, REVIEW, ROUTE, STATUS, STORAGE, URLS,
 } from "./config.js";
 import { AppError } from "./errors.js";
 import { checkSchema, parseDiffs, parseLoad } from "./sheets.js";
@@ -53,18 +53,20 @@ const ERROR_TEXT = Object.freeze({
   [ERROR.NOT_FOUND]: "No se encontró el commit en la hoja: ",
   [ERROR.DECISION]: "Decisión no válida: ",
   [ERROR.LOCK]: "La hoja está ocupada. Intenta otra vez.",
+  [ERROR.SETUP]: "Falta crear la hoja. En Apps Script elige la función setup y pulsa Ejecutar.",
+  [ERROR.SHEET]: "El script no puede abrir la hoja guardada en SHEET_ID. Si la borraste, elimina SHEET_ID de las propiedades del script y ejecuta setup otra vez.",
   [ERROR.SERVER]: "La aplicación web devolvió un error. Revisa la hoja y Code.gs.",
 });
 const SETUP_STEPS = Object.freeze([
-  ["Sube la plantilla a Drive.", "Ábrela con Hojas de cálculo de Google. Trae las pestañas commits, diffs, reviews y meta con schema_version = 1."],
-  ["Pega Code.gs.", "En la hoja: Extensiones → Apps Script. Borra el ejemplo y pega todo el archivo."],
+  ["Abre script.new.", "Crea un proyecto de Apps Script con tu cuenta de Google."],
+  ["Pega Code.gs.", "Borra el ejemplo y pega todo el archivo."],
+  ["Ejecuta setup una vez.", "Elige la función setup arriba y pulsa Ejecutar. Acepta los permisos. La hoja diff-review aparece en la raíz de Mi unidad; puedes moverla a otra carpeta."],
   ["Crea la clave.", "Configuración del proyecto → Propiedades del script → SECRET con una clave larga. No la escribas en el código."],
   ["Publica la aplicación web.", "Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Acceso: cualquier usuario. Copia la URL que termina en /exec."],
   ["Conecta la app.", "En Ajustes pega la URL y la clave y pulsa Probar conexión. Se guardan solo en este navegador."],
   ["Si cambias Code.gs.", "Implementar → Gestionar implementaciones → Editar → Nueva versión. La URL no cambia."],
 ]);
 const DEMO = new URLSearchParams(location.search).get(DEMO_PARAM) === DEMO_ON;
-const CSV_FILES = Object.freeze(Object.values(TAB).map((tab) => ({ tab, href: `plantilla/${tab}.csv` })));
 
 function safeStorage(name) {
   try {
@@ -664,10 +666,9 @@ function fillSetup() {
   const code = h("code", { id: "setup-code", text: "Cargando Code.gs…" });
   const copy = h("button", { class: "btn primary", type: "button", id: "setup-copy", disabled: true, onclick: copyCode, text: "Copiar Code.gs" });
   body.replaceChildren(
-    h("p", { class: "hint", text: "Con una hoja de Google y Apps Script alcanza. La URL y la clave se guardan solo en este navegador." }),
+    h("p", { class: "hint", text: "Solo necesitas Apps Script: setup crea la hoja en tu Drive. La URL y la clave se guardan solo en este navegador." }),
     h("div", { class: "setup-downloads" },
-      h("a", { class: "btn primary", href: URLS.TEMPLATE_XLSX, download: "diff-review-plantilla.xlsx", text: "Descargar plantilla .xlsx" }),
-      h("div", { class: "pills" }, CSV_FILES.map((csv) => h("a", { class: "pill", href: csv.href, download: "", text: `${csv.tab}.csv` })))),
+      h("a", { class: "btn primary", id: "setup-new-script", href: URLS.NEW_SCRIPT, target: "_blank", rel: "noopener", text: "Abrir script.new" })),
     h("h3", { text: "Pasos" }),
     h("ol", { class: "steps" }, SETUP_STEPS.map(([title, text]) => h("li", {}, h("strong", { text: title }), " ", text))),
     h("h3", { text: "Code.gs" }),

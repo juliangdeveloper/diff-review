@@ -1,4 +1,4 @@
-const CACHE = "diff-review-v0.2.0";
+const CACHE = "diff-review-v0.2.1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -12,7 +12,6 @@ const ASSETS = [
   "./js/model.js",
   "./js/app.js",
   "./apps-script/Code.gs",
-  "./plantilla/diff-review-plantilla.xlsx",
   "./favicon.svg",
   "./manifest.json",
 ];

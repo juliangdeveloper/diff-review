@@ -1,6 +1,8 @@
 var SCHEMA_VERSION_ = "1";
 var SCHEMA_KEY_ = "schema_version";
 var SECRET_PROPERTY_ = "SECRET";
+var SHEET_ID_PROPERTY_ = "SHEET_ID";
+var NEW_SHEET_NAME_ = "diff-review";
 var LOCK_MS_ = 30000;
 var TEXT_FORMAT_ = "@";
 var MAX_COMMENT_ = 10000;
@@ -13,6 +15,8 @@ var TAB_ = Object.freeze({
   REVIEWS: "reviews",
   META: "meta",
 });
+
+var TAB_ORDER_ = Object.freeze([TAB_.COMMITS, TAB_.DIFFS, TAB_.REVIEWS, TAB_.META]);
 
 var COMMIT_ = Object.freeze({
   SHA: "commit_sha",
@@ -79,6 +83,8 @@ var ERROR_ = Object.freeze({
   NOT_FOUND: "not_found",
   DECISION: "decision",
   LOCK: "lock",
+  SETUP: "setup",
+  SHEET: "sheet",
   SERVER: "server",
 });
 
@@ -160,6 +166,108 @@ function text_(value) {
   return String(value);
 }
 
+function sheetId_() {
+  return String(PropertiesService.getScriptProperties().getProperty(SHEET_ID_PROPERTY_) || "").trim();
+}
+
+function openSheet_(id) {
+  try {
+    return SpreadsheetApp.openById(id);
+  } catch (err) {
+    return null;
+  }
+}
+
+function spreadsheet_() {
+  var id = sheetId_();
+  if (!id) throw fail_(ERROR_.SETUP);
+  var ss = openSheet_(id);
+  if (!ss) throw fail_(ERROR_.SHEET);
+  return ss;
+}
+
+function setup() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(LOCK_MS_);
+  try {
+    var id = sheetId_();
+    if (id) {
+      var existing = openSheet_(id);
+      var known = existing
+        ? "diff-review ya está configurado: " + existing.getUrl()
+        : "No se puede abrir la hoja guardada en SHEET_ID. Si la borraste, elimina SHEET_ID de las propiedades del script y ejecuta setup otra vez.";
+      console.log(known);
+      return known;
+    }
+    var ss = SpreadsheetApp.create(NEW_SHEET_NAME_);
+    var first = ss.getSheets()[0];
+    repair_(ss);
+    if (first && TAB_ORDER_.indexOf(first.getName()) < 0 && first.getLastRow() === 0 && first.getLastColumn() === 0) {
+      ss.deleteSheet(first);
+    }
+    SpreadsheetApp.flush();
+    PropertiesService.getScriptProperties().setProperty(SHEET_ID_PROPERTY_, ss.getId());
+    var created = "Hoja creada en Mi unidad: " + ss.getUrl();
+    console.log(created);
+    return created;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function missingHeaders_(sheet, tab) {
+  var lastCol = sheet.getLastColumn();
+  var row = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var present = {};
+  for (var c = 0; c < row.length; c += 1) present[text_(row[c]).trim().toLowerCase()] = true;
+  var missing = [];
+  for (var i = 0; i < HEADERS_[tab].length; i += 1) {
+    if (!present[HEADERS_[tab][i]]) missing.push(HEADERS_[tab][i]);
+  }
+  return { missing: missing, start: row.join("").trim() ? lastCol + 1 : 1 };
+}
+
+function needsRepair_(ss) {
+  for (var i = 0; i < TAB_ORDER_.length; i += 1) {
+    var sheet = ss.getSheetByName(TAB_ORDER_[i]);
+    if (!sheet || missingHeaders_(sheet, TAB_ORDER_[i]).missing.length) return true;
+  }
+  return false;
+}
+
+function repair_(ss) {
+  for (var i = 0; i < TAB_ORDER_.length; i += 1) {
+    var tab = TAB_ORDER_[i];
+    var sheet = ss.getSheetByName(tab);
+    var fresh = !sheet;
+    if (fresh) sheet = ss.insertSheet(tab, ss.getSheets().length);
+    var gap = missingHeaders_(sheet, tab);
+    if (!gap.missing.length) continue;
+    writeText_(sheet.getRange(1, gap.start, 1, gap.missing.length), [gap.missing]);
+    sheet.getRange(1, 1, sheet.getMaxRows(), Math.max(sheet.getLastColumn(), HEADERS_[tab].length)).setNumberFormat(TEXT_FORMAT_);
+    if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
+    if (fresh && tab === TAB_.META) {
+      writeText_(sheet.getRange(2, 1, 1, 2), [[SCHEMA_KEY_, SCHEMA_VERSION_]]);
+    }
+  }
+}
+
+function ensureStructure_(ss) {
+  if (!needsRepair_(ss)) return;
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(LOCK_MS_);
+  } catch (err) {
+    throw fail_(ERROR_.LOCK);
+  }
+  try {
+    repair_(ss);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function sheet_(ss, tab) {
   var sheet = ss.getSheetByName(tab);
   if (!sheet) throw fail_(ERROR_.TABS, tab);
@@ -236,7 +344,8 @@ function dataRows_(values) {
 }
 
 function ping_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = spreadsheet_();
+  ensureStructure_(ss);
   checkTabs_(ss);
   var version = schema_(ss);
   var commits = table_(ss, TAB_.COMMITS);
@@ -252,7 +361,8 @@ function ping_() {
 }
 
 function load_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = spreadsheet_();
+  ensureStructure_(ss);
   checkTabs_(ss);
   var version = schema_(ss);
   return {
@@ -267,7 +377,8 @@ function load_() {
 function diffs_(sha) {
   var target = String(sha == null ? "" : sha).trim();
   if (!target) throw fail_(ERROR_.BAD_REQUEST);
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = spreadsheet_();
+  ensureStructure_(ss);
   var sheet = sheet_(ss, TAB_.DIFFS);
   var head = header_(sheet, TAB_.DIFFS);
   var out = [head.names];
@@ -367,7 +478,8 @@ function review_(input) {
     throw fail_(ERROR_.LOCK);
   }
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = spreadsheet_();
+    repair_(ss);
     checkTabs_(ss);
     schema_(ss);
     var commits = table_(ss, TAB_.COMMITS);
