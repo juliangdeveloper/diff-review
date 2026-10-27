@@ -836,7 +836,24 @@ document.getElementById("setup").addEventListener("click", (e) => {
   if (e.target.id === "setup") e.target.close();
 });
 document.getElementById("demo-badge").hidden = !DEMO;
+document.getElementById("bar-version").textContent = `v${APP_VERSION}`;
 if (configured()) refresh();
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+      .then((registration) => {
+        registration.update().catch(() => {});
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") registration.update().catch(() => {});
+        });
+      })
+      .catch(() => {});
+  });
 }

@@ -35,7 +35,7 @@ JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps 
 python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
-Versión actual: `diff-review v0.2.2`.
+Versión actual: `diff-review v0.2.3`.
 
 ---
 
