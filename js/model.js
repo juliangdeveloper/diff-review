@@ -3,8 +3,6 @@ import { toNumber } from "./sheets.js";
 import { joinChunks } from "./diff.js";
 
 const KEY_SEPARATOR = "\u0001";
-const SHEET_URL_RE = /\/spreadsheets\/d\/([A-Za-z0-9_-]+)/;
-const SHEET_ID_RE = /^[A-Za-z0-9_-]{20,}$/;
 export const SHORT_SHA_LENGTH = 7;
 const STATUS_VALUES = new Set(Object.values(STATUS));
 
@@ -110,13 +108,6 @@ export function filesFor(diffRows, sha) {
     });
   }
   return [...groups.values()].map((file) => ({ ...file, ...joinChunks(file.chunks) }));
-}
-
-export function parseSheetInput(text) {
-  const value = String(text || "").trim();
-  const match = SHEET_URL_RE.exec(value);
-  if (match) return match[1];
-  return SHEET_ID_RE.test(value) ? value : "";
 }
 
 export function newId() {

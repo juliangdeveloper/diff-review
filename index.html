@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Revisa diffs de commits guardados en una hoja de Google Sheets.">
+  <meta name="description" content="Revisa diffs de commits guardados en tu hoja de Google, conectada con Apps Script.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Diff Review</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="manifest" href="manifest.json?v=0.1.1">
-  <link rel="stylesheet" href="css/styles.css?v=0.1.1">
+  <link rel="manifest" href="manifest.json?v=0.2.0">
+  <link rel="stylesheet" href="css/styles.css?v=0.2.0">
 </head>
 <body>
   <header class="bar">
@@ -22,6 +22,7 @@
       <span>Volver</span>
     </a>
     <p class="bar-title" id="bar-title"></p>
+    <span class="demo-badge" id="demo-badge" hidden>Demo</span>
     <button class="bar-btn icon" id="refresh" type="button" aria-label="Recargar" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.2-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
@@ -45,8 +46,15 @@
       <span>Ajustes</span>
     </a>
   </nav>
+  <dialog class="sheet-dialog" id="setup" aria-labelledby="setup-title">
+    <div class="sheet-scroll">
+      <h2 id="setup-title">Cómo preparar la hoja</h2>
+      <div id="setup-body"></div>
+    </div>
+    <button class="btn primary" type="button" id="setup-close">Cerrar</button>
+  </dialog>
   <p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
   <template id="icon-chevron"><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></template>
-  <script type="module" src="js/app.js?v=0.1.1"></script>
+  <script type="module" src="js/app.js?v=0.2.0"></script>
 </body>
 </html>

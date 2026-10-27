@@ -1,40 +1,58 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.1.1";
+export const APP_VERSION = "0.2.0";
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
 export const LARGE_FILE_LINES = 800;
 export const AUTO_OPEN_MAX_FILES = 8;
-export const TOKEN_MARGIN_MS = 60000;
-export const SCRIPT_TIMEOUT_MS = 15000;
+export const REQUEST_TIMEOUT_MS = 30000;
 export const MESSAGE_PREVIEW_CHARS = 140;
 
 const PREFIX = "diffreview.";
 export const STORAGE = Object.freeze({
-  CLIENT_ID: PREFIX + "clientId",
-  API_KEY: PREFIX + "apiKey",
-  SHEET_ID: PREFIX + "sheetId",
-  SHEET_NAME: PREFIX + "sheetName",
+  CONNECTION: PREFIX + "connection",
   WRAP: PREFIX + "wrap",
   REVIEWER: PREFIX + "reviewer",
-  TOKEN: PREFIX + "token",
 });
 
-export const SCOPES = Object.freeze([
-  "https://www.googleapis.com/auth/drive.file",
-  "openid",
-  "email",
+export const LEGACY_STORAGE = Object.freeze([
+  PREFIX + "clientId",
+  PREFIX + "apiKey",
+  PREFIX + "sheetId",
+  PREFIX + "sheetName",
+  PREFIX + "token",
 ]);
 
 export const URLS = Object.freeze({
-  GSI: "https://accounts.google.com/gsi/client",
-  GAPI: "https://apis.google.com/js/api.js",
-  SHEETS: "https://sheets.googleapis.com/v4/spreadsheets/",
-  USERINFO: "https://www.googleapis.com/oauth2/v3/userinfo",
   TEMPLATE_XLSX: "plantilla/diff-review-plantilla.xlsx",
+  CODE_GS: "apps-script/Code.gs",
 });
 
-export const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+export const ACTION = Object.freeze({
+  PING: "ping",
+  LOAD: "load",
+  DIFFS: "diffs",
+  REVIEW: "review",
+});
+
+export const ERROR = Object.freeze({
+  INPUT: "input",
+  NETWORK: "network",
+  URL: "url",
+  TIMEOUT: "timeout",
+  FORBIDDEN: "forbidden",
+  BAD_REQUEST: "bad_request",
+  TABS: "tabs",
+  HEADERS: "headers",
+  SCHEMA: "schema",
+  NOT_FOUND: "not_found",
+  DECISION: "decision",
+  LOCK: "lock",
+  SERVER: "server",
+});
+
+export const DEMO_PARAM = "demo";
+export const DEMO_ON = "1";
 
 export const TAB = Object.freeze({
   COMMITS: "commits",

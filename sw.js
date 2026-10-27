@@ -1,14 +1,18 @@
-const CACHE = "diff-review-v0.1.1";
+const CACHE = "diff-review-v0.2.0";
 const ASSETS = [
   "./",
   "./index.html",
   "./css/styles.css",
   "./js/config.js",
-  "./js/google.js",
+  "./js/errors.js",
+  "./js/script.js",
   "./js/sheets.js",
+  "./js/demo.js",
   "./js/diff.js",
   "./js/model.js",
   "./js/app.js",
+  "./apps-script/Code.gs",
+  "./plantilla/diff-review-plantilla.xlsx",
   "./favicon.svg",
   "./manifest.json",
 ];

@@ -1,12 +1,16 @@
 import {
-  APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, FILTER_ALL, HEADERS,
-  LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, REVIEW, ROUTE, SCOPES, STATUS, STORAGE, TAB, URLS,
+  APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
+  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, REVIEW, ROUTE, STATUS, STORAGE, TAB, URLS,
 } from "./config.js";
-import { AppError, ERROR, clearStoredToken, pickSheet, readStoredToken, revoke, signIn } from "./google.js";
-import { appendReview, loadDiffs, loadSheet, updateStatus } from "./sheets.js";
+import { AppError } from "./errors.js";
+import { checkSchema, parseDiffs, parseLoad } from "./sheets.js";
+import {
+  cleanLegacy, clearConnection, connectionError, createScriptBackend, loadConnection, saveConnection,
+} from "./script.js";
+import { createDemoBackend } from "./demo.js";
 import { parsePatch, renderLines } from "./diff.js";
 import {
-  branchSummary, commitKey, commitStats, commitStatus, filesFor, firstLine, newId, parseSheetInput,
+  branchSummary, commitStats, commitStatus, filesFor, firstLine, newId,
   restLines, reviewsFor, SHORT_SHA_LENGTH, shortSha, sortCommits, sortReviews, uniqueValues,
 } from "./model.js";
 
@@ -37,25 +41,52 @@ const STATUS_FILTER_LABEL = Object.freeze({
   [STATUS.REJECTED]: "Rechazados",
 });
 const ERROR_TEXT = Object.freeze({
-  [ERROR.NO_CLIENT]: "Falta el Client ID de OAuth. Agrégalo en Ajustes.",
-  [ERROR.NO_SHEET]: "Falta elegir la hoja. Hazlo en Ajustes.",
-  [ERROR.AUTH]: "La sesión de Google expiró o se canceló. Vuelve a conectar.",
-  [ERROR.ACCESS]: "Sin acceso a la hoja. Elígela con el selector de Drive en Ajustes para dar permiso a esta app.",
-  [ERROR.SCRIPT]: "No se pudieron cargar los servicios de Google. Revisa la conexión.",
-  [ERROR.PICKER]: "No se pudo abrir el selector de Drive.",
+  [ERROR.INPUT]: "",
+  [ERROR.NETWORK]: "No se pudo conectar. Revisa la URL /exec y que el acceso sea «Cualquier usuario».",
+  [ERROR.URL]: "Esa URL no respondió como la aplicación web. Usa la URL /exec de la implementación.",
+  [ERROR.TIMEOUT]: "La aplicación web tardó demasiado. Intenta otra vez.",
+  [ERROR.FORBIDDEN]: "La clave no coincide con SECRET en las propiedades del script.",
+  [ERROR.BAD_REQUEST]: "La aplicación web no reconoce la petición. Actualiza Code.gs y publica una nueva versión.",
   [ERROR.TABS]: "A la hoja le faltan pestañas: ",
   [ERROR.HEADERS]: "Faltan columnas en la hoja: ",
   [ERROR.SCHEMA]: "La hoja no es compatible. En meta se espera schema_version = 1 y se encontró: ",
-  [ERROR.HTTP]: "Error al hablar con Google Sheets: ",
   [ERROR.NOT_FOUND]: "No se encontró el commit en la hoja: ",
+  [ERROR.DECISION]: "Decisión no válida: ",
+  [ERROR.LOCK]: "La hoja está ocupada. Intenta otra vez.",
+  [ERROR.SERVER]: "La aplicación web devolvió un error. Revisa la hoja y Code.gs.",
 });
+const SETUP_STEPS = Object.freeze([
+  ["Sube la plantilla a Drive.", "Ábrela con Hojas de cálculo de Google. Trae las pestañas commits, diffs, reviews y meta con schema_version = 1."],
+  ["Pega Code.gs.", "En la hoja: Extensiones → Apps Script. Borra el ejemplo y pega todo el archivo."],
+  ["Crea la clave.", "Configuración del proyecto → Propiedades del script → SECRET con una clave larga. No la escribas en el código."],
+  ["Publica la aplicación web.", "Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Acceso: cualquier usuario. Copia la URL que termina en /exec."],
+  ["Conecta la app.", "En Ajustes pega la URL y la clave y pulsa Probar conexión. Se guardan solo en este navegador."],
+  ["Si cambias Code.gs.", "Implementar → Gestionar implementaciones → Editar → Nueva versión. La URL no cambia."],
+]);
+const DEMO = new URLSearchParams(location.search).get(DEMO_PARAM) === DEMO_ON;
 const CSV_FILES = Object.freeze(Object.values(TAB).map((tab) => ({ tab, href: `plantilla/${tab}.csv` })));
 
+function safeStorage(name) {
+  try {
+    return globalThis[name] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+cleanLegacy(safeStorage("localStorage"), safeStorage("sessionStorage"));
+
+function startBackend() {
+  if (DEMO) return createDemoBackend();
+  const saved = loadConnection(safeStorage("localStorage"));
+  return saved ? createScriptBackend(saved) : null;
+}
+
 const state = {
-  auth: readStoredToken(),
+  backend: startBackend(),
+  connMessage: null,
   data: null,
-  diffs: null,
-  diffsPromise: null,
+  diffs: new Map(),
   loading: false,
   error: null,
   filter: { repo: FILTER_ALL, branch: FILTER_ALL, status: FILTER_ALL, query: "" },
@@ -98,8 +129,8 @@ function saveSetting(key, value) {
 }
 
 function errorText(err) {
-  const code = err?.code || ERROR.HTTP;
-  const base = ERROR_TEXT[code] || ERROR_TEXT[ERROR.HTTP];
+  const code = err?.code || ERROR.SERVER;
+  const base = ERROR_TEXT[code] || ERROR_TEXT[ERROR.SERVER];
   const detail = err?.detail || (code === ERROR.SCHEMA ? "nada" : "");
   return base.endsWith(": ") ? base + detail : base;
 }
@@ -141,40 +172,15 @@ function commitHash(commit) {
 }
 
 function configured() {
-  return Boolean(setting(STORAGE.CLIENT_ID) && setting(STORAGE.SHEET_ID));
-}
-
-function token() {
-  const saved = readStoredToken();
-  if (!saved) {
-    state.auth = null;
-    throw new AppError(ERROR.AUTH);
-  }
-  return saved.token;
+  return Boolean(state.backend);
 }
 
 function handleError(err) {
-  if (err?.code === ERROR.AUTH) {
-    clearStoredToken();
-    state.auth = null;
-  }
-  state.error = err instanceof AppError ? err : new AppError(ERROR.HTTP, String(err?.message || ""));
-}
-
-async function connect() {
-  try {
-    state.auth = await signIn(setting(STORAGE.CLIENT_ID));
-    state.error = null;
-    await refresh();
-  } catch (err) {
-    handleError(err);
-    toast(errorText(state.error));
-    render();
-  }
+  state.error = err instanceof AppError ? err : new AppError(ERROR.SERVER, String(err?.message || ""));
 }
 
 async function refresh() {
-  if (!configured() || !state.auth) {
+  if (!configured()) {
     render();
     return;
   }
@@ -182,9 +188,8 @@ async function refresh() {
   state.error = null;
   render();
   try {
-    state.data = await loadSheet(token(), setting(STORAGE.SHEET_ID));
-    state.diffs = null;
-    state.diffsPromise = null;
+    state.data = parseLoad(await state.backend.load());
+    state.diffs = new Map();
   } catch (err) {
     state.data = null;
     handleError(err);
@@ -194,20 +199,17 @@ async function refresh() {
   }
 }
 
-function ensureDiffs() {
-  if (state.diffs) return Promise.resolve(state.diffs);
-  if (!state.diffsPromise) {
-    state.diffsPromise = loadDiffs(token(), setting(STORAGE.SHEET_ID))
-      .then((table) => {
-        state.diffs = table;
-        return table;
-      })
+function ensureDiffs(sha) {
+  if (!state.diffs.has(sha)) {
+    const pending = state.backend.diffs(sha)
+      .then((body) => parseDiffs(body))
       .catch((err) => {
-        state.diffsPromise = null;
+        if (state.diffs.get(sha) === pending) state.diffs.delete(sha);
         throw err;
       });
+    state.diffs.set(sha, pending);
   }
-  return state.diffsPromise;
+  return state.diffs.get(sha);
 }
 
 function badge(status, text) {
@@ -227,15 +229,9 @@ function gate() {
   if (!configured()) {
     return emptyCard(
       "Conecta tu hoja",
-      "Agrega el Client ID de OAuth y elige la hoja de Google Sheets en Ajustes.",
+      "Publica el Apps Script de tu hoja y pega la URL /exec y la clave en Ajustes.",
       h("a", { class: "btn primary", href: hashFor(ROUTE.SETTINGS), text: "Ir a Ajustes" }),
-    );
-  }
-  if (!state.auth) {
-    return emptyCard(
-      "Inicia sesión",
-      state.error ? errorText(state.error) : "Conecta tu cuenta de Google para leer la hoja.",
-      h("button", { class: "btn primary", type: "button", onclick: connect, text: "Conectar con Google" }),
+      h("button", { class: "btn", type: "button", onclick: openSetup, text: "Cómo preparar la hoja" }),
     );
   }
   if (state.loading && !state.data) return h("p", { class: "loading", text: "Cargando…" });
@@ -459,21 +455,24 @@ async function submitReview(commit, decision, form) {
     [REVIEW.BRANCH]: commit[COMMIT.BRANCH],
     [REVIEW.DECISION]: decision,
     [REVIEW.COMMENT]: comment,
-    [REVIEW.REVIEWER]: state.auth?.email || "",
-    [REVIEW.AT]: new Date().toISOString(),
+    [REVIEW.REVIEWER]: setting(STORAGE.REVIEWER),
   };
   try {
-    const sheetId = setting(STORAGE.SHEET_ID);
-    await appendReview(token(), sheetId, state.data.reviews, review);
-    state.data.reviews.rows.push({ ...review, _row: Number.MAX_SAFE_INTEGER });
+    const result = await state.backend.review(review);
+    const saved = { ...review, ...(result.review || {}) };
+    if (!saved[REVIEW.AT]) saved[REVIEW.AT] = new Date().toISOString();
+    if (!state.data.reviews.rows.some((row) => row[REVIEW.ID] === saved[REVIEW.ID])) {
+      state.data.reviews.rows.push({ ...saved, _row: Number.MAX_SAFE_INTEGER });
+    }
     const status = DECISION_STATUS[decision];
-    if (status) {
-      await updateStatus(token(), sheetId, state.data.commits, commit[COMMIT.SHA], commit[COMMIT.BRANCH], status);
+    const next = result.status || status;
+    if (next) {
       state.data.commits.rows
         .filter((c) => c[COMMIT.SHA] === commit[COMMIT.SHA] && c[COMMIT.BRANCH] === commit[COMMIT.BRANCH])
-        .forEach((c) => { c[COMMIT.STATUS] = status; });
+        .forEach((c) => { c[COMMIT.STATUS] = next; });
     }
-    toast(status ? `${LABEL.status[status]} y guardado en la hoja.` : "Comentario guardado en la hoja.");
+    const where = state.backend.demo ? "en la demo" : "en la hoja";
+    toast(status ? `${LABEL.status[status]} y guardado ${where}.` : `Comentario guardado ${where}.`);
     textarea.value = "";
     render();
   } catch (err) {
@@ -481,7 +480,6 @@ async function submitReview(commit, decision, form) {
     toast(errorText(state.error));
     state.error = state.data ? null : state.error;
     buttons.forEach((b) => { b.disabled = false; });
-    if (!state.auth) render();
   }
 }
 
@@ -545,7 +543,7 @@ function filesSection(commit) {
         h("button", { class: "pill", type: "button", onclick: () => toggleAll(false), text: "Cerrar" }))),
     list);
   const sha = commit[COMMIT.SHA];
-  ensureDiffs()
+  ensureDiffs(sha)
     .then((table) => {
       const files = filesFor(table.rows, sha);
       section.querySelector("#files-title").textContent = `Archivos (${files.length})`;
@@ -582,7 +580,7 @@ function viewCommit(sha, branch) {
       h("button", { class: "btn approve", type: "button", onclick: () => submitReview(commit, DECISION.APPROVED, form), text: "Aprobar" }),
       h("button", { class: "btn reject", type: "button", onclick: () => submitReview(commit, DECISION.REJECTED, form), text: "Rechazar" }),
       h("button", { class: "btn", type: "button", onclick: () => submitReview(commit, DECISION.COMMENT, form), text: "Comentar" })),
-    h("p", { class: "hint", text: state.auth?.email ? `Se guarda como ${state.auth.email}` : "Se guarda sin correo." }));
+    h("p", { class: "hint", text: reviewerHint() }));
   return [
     h("article", { class: "commit-head" },
       h("div", { class: "commit-badges" }, badge(status), h("span", { class: "mono muted", text: shortSha(commit) })),
@@ -608,6 +606,11 @@ function viewCommit(sha, branch) {
   ];
 }
 
+function reviewerHint() {
+  const name = setting(STORAGE.REVIEWER);
+  return name ? `Se guarda como ${name}.` : "Se guarda sin nombre de revisor. Puedes poner uno en Ajustes.";
+}
+
 function settingsInput(label, key, props = {}) {
   return h("label", { class: "field" },
     h("span", { class: "select-label", text: label }),
@@ -620,75 +623,173 @@ function settingsInput(label, key, props = {}) {
     }));
 }
 
-async function choose() {
+let codeText = "";
+async function loadCode() {
+  if (codeText) return codeText;
+  const res = await fetch(URLS.CODE_GS, { cache: "no-cache" });
+  if (!res.ok) throw new AppError(ERROR.URL, String(res.status));
+  codeText = await res.text();
+  return codeText;
+}
+
+function setupNote(text) {
+  const note = document.getElementById("setup-note");
+  if (!note) return;
+  note.textContent = text;
+  note.hidden = !text;
+}
+
+async function copyCode() {
+  const button = document.getElementById("setup-copy");
   try {
-    const clientId = setting(STORAGE.CLIENT_ID);
-    if (!clientId) throw new AppError(ERROR.NO_CLIENT);
-    if (!readStoredToken()) state.auth = await signIn(clientId);
-    const picked = await pickSheet({ clientId, apiKey: setting(STORAGE.API_KEY), token: token() });
-    if (!picked) return;
-    saveSetting(STORAGE.SHEET_ID, picked.id);
-    saveSetting(STORAGE.SHEET_NAME, picked.name);
-    state.data = null;
-    await refresh();
-    toast("Hoja conectada.");
-  } catch (err) {
-    handleError(err);
-    toast(errorText(state.error));
-    render();
+    await navigator.clipboard.writeText(await loadCode());
+    setupNote("Code.gs copiado. Pégalo en Apps Script.");
+    button.textContent = "Copiado";
+    setTimeout(() => { button.textContent = "Copiar Code.gs"; }, TOAST_MS);
+  } catch (e) {
+    const code = document.getElementById("setup-code");
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    setupNote("No se pudo copiar solo. El código quedó seleccionado: cópialo con el menú del navegador.");
   }
 }
 
-function viewSettings() {
-  const sheetId = setting(STORAGE.SHEET_ID);
-  const sheetName = state.data?.title || setting(STORAGE.SHEET_NAME);
-  const pasted = h("input", { placeholder: "ID o URL de la hoja", autocomplete: "off", spellcheck: "false" });
-  const savePasted = () => {
-    const id = parseSheetInput(pasted.value);
-    if (!id) {
-      toast("No parece un ID o URL de Google Sheets.");
-      return;
-    }
-    saveSetting(STORAGE.SHEET_ID, id);
-    saveSetting(STORAGE.SHEET_NAME, "");
+function fillSetup() {
+  const body = document.getElementById("setup-body");
+  if (body.dataset.ready) return;
+  body.dataset.ready = "1";
+  const code = h("code", { id: "setup-code", text: "Cargando Code.gs…" });
+  const copy = h("button", { class: "btn primary", type: "button", id: "setup-copy", disabled: true, onclick: copyCode, text: "Copiar Code.gs" });
+  body.replaceChildren(
+    h("p", { class: "hint", text: "Con una hoja de Google y Apps Script alcanza. La URL y la clave se guardan solo en este navegador." }),
+    h("div", { class: "setup-downloads" },
+      h("a", { class: "btn primary", href: URLS.TEMPLATE_XLSX, download: "diff-review-plantilla.xlsx", text: "Descargar plantilla .xlsx" }),
+      h("div", { class: "pills" }, CSV_FILES.map((csv) => h("a", { class: "pill", href: csv.href, download: "", text: `${csv.tab}.csv` })))),
+    h("h3", { text: "Pasos" }),
+    h("ol", { class: "steps" }, SETUP_STEPS.map(([title, text]) => h("li", {}, h("strong", { text: title }), " ", text))),
+    h("h3", { text: "Code.gs" }),
+    h("div", { class: "code-actions" },
+      copy,
+      h("a", { class: "btn", href: URLS.CODE_GS, download: "Code.gs", text: "Descargar Code.gs" })),
+    h("p", { class: "setup-note", id: "setup-note", role: "status", "aria-live": "polite", hidden: true }),
+    h("pre", { class: "code-block", tabindex: "0" }, code),
+    h("h3", { text: "Pestañas y columnas" }),
+    h("p", { class: "hint" }, Object.entries(HEADERS).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))),
+    h("p", { class: "hint", text: "Carga commits y diffs en modo RAW. patch va en fragmentos de hasta 40.000 caracteres y chunk_index empieza en 0. La app escribe en reviews y en commits.status." }));
+  loadCode()
+    .then((text) => {
+      code.textContent = text;
+      copy.disabled = false;
+    })
+    .catch(() => {
+      code.textContent = "No se pudo cargar Code.gs. Usa Descargar Code.gs.";
+    });
+}
+
+function openSetup() {
+  fillSetup();
+  document.getElementById("setup").showModal();
+}
+
+function connectionStatus() {
+  const message = state.connMessage;
+  const node = h("p", { class: "conn-status", id: "conn-status", role: "status", "aria-live": "polite" });
+  if (message) {
+    node.textContent = message.text;
+    if (message.ok === true) node.classList.add("ok");
+    if (message.ok === false) node.classList.add("bad");
+  } else {
+    node.textContent = configured() ? "Conexión guardada en este navegador." : "Sin conexión.";
+  }
+  return node;
+}
+
+function setConnMessage(text, ok) {
+  state.connMessage = { text, ok };
+  const old = document.getElementById("conn-status");
+  if (old) old.replaceWith(connectionStatus());
+}
+
+async function testConnection(urlInput, keyInput, button) {
+  const connection = { url: urlInput.value.trim(), key: keyInput.value };
+  const problem = connectionError(connection.url, connection.key);
+  if (problem) {
+    setConnMessage(problem, false);
+    return;
+  }
+  button.disabled = true;
+  setConnMessage("Probando…", null);
+  try {
+    const backend = createScriptBackend(connection);
+    const info = await backend.ping();
+    checkSchema(info);
+    saveConnection(safeStorage("localStorage"), connection);
+    state.backend = backend;
     state.data = null;
-    pasted.value = "";
-    toast("Hoja guardada.");
-    refresh();
-  };
+    state.diffs = new Map();
+    const title = info.title ? `«${info.title}»` : "la hoja";
+    setConnMessage(`Conectado a ${title}: schema_version ${info.schema_version}, ${Number(info.commits) || 0} commits y ${Number(info.reviews) || 0} revisiones.`, true);
+    await refresh();
+  } catch (err) {
+    setConnMessage(errorText(err instanceof AppError ? err : new AppError(ERROR.SERVER)), false);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function forgetConnection() {
+  clearConnection(safeStorage("localStorage"));
+  state.backend = null;
+  state.data = null;
+  state.diffs = new Map();
+  state.connMessage = { text: "La conexión se olvidó en este navegador.", ok: null };
+  render();
+}
+
+function connectionSection() {
+  if (DEMO) {
+    return h("div", { class: "card form" },
+      h("p", { class: "muted", text: "Estás en la demo: usa datos de ejemplo y las revisiones quedan solo en esta pestaña." }),
+      h("a", { class: "btn primary", href: location.pathname, text: "Salir de la demo" }),
+      h("button", { class: "btn", type: "button", onclick: openSetup, text: "Cómo preparar la hoja" }));
+  }
+  const saved = loadConnection(safeStorage("localStorage"));
+  const url = h("input", {
+    id: "conn-url", type: "url", inputmode: "url", autocomplete: "off", spellcheck: "false",
+    placeholder: "https://script.google.com/macros/s/…/exec", value: saved?.url || "",
+  });
+  const key = h("input", { id: "conn-key", type: "password", autocomplete: "off", spellcheck: "false", value: saved?.key || "" });
+  const test = h("button", { class: "btn primary", type: "button", id: "conn-test", text: "Probar conexión" });
+  test.addEventListener("click", () => testConnection(url, key, test));
+  return h("div", { class: "card form" },
+    h("label", { class: "field" }, h("span", { class: "select-label", text: "URL de la aplicación web" }), url),
+    h("label", { class: "field" }, h("span", { class: "select-label", text: "Clave (SECRET)" }), key),
+    test,
+    connectionStatus(),
+    h("button", { class: "btn", type: "button", id: "setup-open", onclick: openSetup, text: "Cómo preparar la hoja" }),
+    saved ? h("button", { class: "btn", type: "button", id: "conn-forget", onclick: forgetConnection, text: "Olvidar conexión" }) : null,
+    h("p", { class: "hint", text: "La URL y la clave se guardan solo en este navegador." }));
+}
+
+function viewSettings() {
   return [
     h("section", { class: "group" },
-      h("h2", { class: "group-title", text: "Google" }),
-      h("div", { class: "card form" },
-        settingsInput("Client ID de OAuth", STORAGE.CLIENT_ID, { placeholder: "…apps.googleusercontent.com" }),
-        settingsInput("API key (opcional, para el selector)", STORAGE.API_KEY, { placeholder: "Opcional" }),
-        h("p", { class: "hint" }, "Origen autorizado: ", h("span", { class: "mono break", text: location.origin })),
-        h("p", { class: "hint" }, "Permisos: ", h("span", { class: "mono break", text: SCOPES.join(" ") })))),
+      h("h2", { class: "group-title", text: "Conexión" }),
+      connectionSection()),
     h("section", { class: "group" },
+      h("h2", { class: "group-title", text: "Revisor" }),
+      h("div", { class: "card form" },
+        settingsInput("Nombre del revisor (opcional)", STORAGE.REVIEWER, { id: "reviewer", placeholder: "Sin nombre" }),
+        h("p", { class: "hint", text: "Se escribe en la columna reviewer de cada revisión. El script se ejecuta con tu cuenta y no sabe quién abre la app." }))),
+    state.data?.title ? h("section", { class: "group" },
       h("h2", { class: "group-title", text: "Hoja" }),
       h("div", { class: "card form" },
-        h("p", { class: "sheet-current" }, sheetId
-          ? [h("strong", { text: sheetName || "Hoja guardada" }), h("span", { class: "mono break muted", text: sheetId })]
-          : h("span", { class: "muted", text: "Ninguna hoja elegida." })),
-        h("button", { class: "btn primary", type: "button", onclick: choose, text: "Elegir en Drive" }),
-        h("label", { class: "field" }, h("span", { class: "select-label", text: "O pega el ID o la URL" }), pasted),
-        h("button", { class: "btn", type: "button", onclick: savePasted, text: "Guardar ID" }),
-        h("p", { class: "hint", text: "Con un ID pegado, la app solo tiene acceso si la hoja ya se eligió antes en el selector." }))),
-    h("section", { class: "group" },
-      h("h2", { class: "group-title", text: "Sesión" }),
-      h("div", { class: "card form" },
-        h("p", { class: "muted", text: state.auth ? `Conectado${state.auth.email ? ` como ${state.auth.email}` : ""}.` : "Sin conectar." }),
-        state.auth
-          ? h("button", { class: "btn", type: "button", onclick: () => { revoke(state.auth?.token); state.auth = null; state.data = null; render(); }, text: "Cerrar sesión" })
-          : h("button", { class: "btn primary", type: "button", onclick: connect, text: "Conectar con Google" }),
-        state.auth ? h("button", { class: "btn", type: "button", onclick: refresh, text: "Recargar hoja" }) : null)),
-    h("section", { class: "group" },
-      h("h2", { class: "group-title", text: "Plantilla" }),
-      h("div", { class: "card form" },
-        h("p", { class: "hint", text: "Súbela a Drive y ábrela como Hojas de cálculo de Google, o importa un CSV por pestaña." }),
-        h("a", { class: "btn primary", href: URLS.TEMPLATE_XLSX, download: "", text: "Descargar plantilla .xlsx" }),
-        h("div", { class: "pills" }, CSV_FILES.map((csv) => h("a", { class: "pill", href: csv.href, download: "", text: `${csv.tab}.csv` }))),
-        h("p", { class: "hint" }, "Columnas: ", Object.entries(HEADERS).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))))),
+        h("p", { class: "sheet-current" }, h("strong", { text: state.data.title }),
+          h("span", { class: "muted", text: `${state.data.commits.rows.length} commits · ${state.data.reviews.rows.length} revisiones` })),
+        h("button", { class: "btn", type: "button", onclick: refresh, text: "Recargar hoja" }))) : null,
     h("p", { class: "version", text: `${APP_ID} v${APP_VERSION}` }),
   ];
 }
@@ -706,7 +807,7 @@ function render() {
   back.hidden = root;
   back.href = name === ROUTE.BRANCH ? hashFor(ROUTE.BRANCHES) : hashFor(ROUTE.COMMITS);
   document.getElementById("bar-title").textContent = root ? "" : name === ROUTE.BRANCH ? "Rama" : "Commit";
-  document.getElementById("refresh").hidden = !(state.auth && configured());
+  document.getElementById("refresh").hidden = !configured();
   document.getElementById("refresh").classList.toggle("spin", state.loading);
   const view = document.getElementById("view");
   const parts = [];
@@ -731,7 +832,12 @@ window.addEventListener("hashchange", () => {
 document.getElementById("refresh").addEventListener("click", refresh);
 lastRoute = parseRoute().name;
 render();
-if (state.auth && configured()) refresh();
+document.getElementById("setup-close").addEventListener("click", () => document.getElementById("setup").close());
+document.getElementById("setup").addEventListener("click", (e) => {
+  if (e.target.id === "setup") e.target.close();
+});
+document.getElementById("demo-badge").hidden = !DEMO;
+if (configured()) refresh();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }

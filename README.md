@@ -1,34 +1,39 @@
-# diff-review
+# 🔍 diff-review
 
-Revisa diffs de commits guardados en una hoja de Google Sheets: lista por rama, diff legible en el celular, aprobar, rechazar o comentar, e historial de revisiones.
+> Revisa diffs de commits desde el celular, conectado a tu propia hoja de Google.
 
-**[Abrir la app](https://juliangdeveloper.github.io/diff-review/)** · **[Descargar plantilla .xlsx](https://github.com/juliangdeveloper/diff-review/raw/main/plantilla/diff-review-plantilla.xlsx)** · [CSV por pestaña](plantilla/)
+**[▶ Ver demo](https://juliangdeveloper.github.io/diff-review/?demo=1)** · datos de ejemplo, sin conectar nada
 
-## Conectar la hoja
-1. En Google Cloud Console crea un proyecto, activa **Google Sheets API** y **Google Picker API**, y configura la pantalla de consentimiento.
-2. Crea un **ID de cliente OAuth** de tipo *Aplicación web* con este origen autorizado de JavaScript: `https://juliangdeveloper.github.io` (o el origen donde publiques la app).
-3. Sube `diff-review-plantilla.xlsx` a Drive y ábrela con **Hojas de cálculo de Google** (Archivo › Guardar como Hojas de cálculo de Google). También puedes crear una hoja e importar un CSV por pestaña: `commits`, `diffs`, `reviews` y `meta`.
-4. En la app, abre **Ajustes**, pega el Client ID, pulsa **Conectar con Google** y luego **Elegir en Drive** para seleccionar la hoja.
+<img src="assets/screenshot.png" alt="Diff de un commit en diff-review con los botones para aprobar, rechazar o comentar" width="320">
 
-Permisos que pide: `drive.file` (solo la hoja que elijas), `openid` y `email` (para firmar las revisiones). La configuración queda en `localStorage` de este navegador.
+## Cómo se usa
+- En **Commits** ves la lista con su estado y la filtras por rama o estado; **Ramas** agrupa los commits por rama.
+- Abre un commit para leer el diff de cada archivo, con números de línea y ajuste de líneas largas.
+- **Aprobar**, **Rechazar** o **Comentar**, con un comentario opcional; el comentario no cambia el estado.
+- En **Historial** revisas todas las revisiones, de la más reciente a la más antigua.
+- En **Ajustes** puedes poner un nombre de revisor para firmar tus revisiones.
 
-## Formato de la hoja
-| Pestaña | Columnas |
-| --- | --- |
-| `commits` | commit_sha, short_sha, branch, repo, author, date_iso, message, parent_sha, files_changed, additions, deletions, uploaded_at, status |
-| `diffs` | commit_sha, file_path, change_type, old_path, chunk_index, chunk_total, patch |
-| `reviews` | review_id, commit_sha, branch, decision, comment, reviewer, reviewed_at |
-| `meta` | key, value con la fila `schema_version` = `1` |
+## Conectar tu hoja
+La app lee y escribe en una hoja de Google a través de un Apps Script que publicas tú. La URL y la clave se guardan solo en tu navegador, nunca en el repositorio. Dentro de la app, **Cómo preparar la hoja** trae la plantilla y el script listo para copiar.
 
-- `status`: `pending`, `approved` o `rejected`. `decision`: `approved`, `rejected` o `comment`.
-- `change_type`: `A`, `M`, `D` o `R`; `old_path` se usa en renombres.
-- `patch` es el diff unificado de un archivo, partido en fragmentos de hasta 40.000 caracteres; `chunk_index` empieza en 0 y la app los une en orden.
-- Escribe los valores en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`.
-- `reviews` es solo de anexar; la app agrega una fila por revisión y actualiza `commits.status` con la última aprobación o rechazo.
+1. Sube la [plantilla `.xlsx`](https://github.com/juliangdeveloper/diff-review/raw/main/plantilla/diff-review-plantilla.xlsx) a Drive y ábrela con Hojas de cálculo de Google (o importa los [CSV por pestaña](plantilla/)).
+2. En tu hoja: **Extensiones → Apps Script** y pega el contenido de [`apps-script/Code.gs`](apps-script/Code.gs).
+3. En **Configuración del proyecto → Propiedades del script**, crea `SECRET` con una clave larga.
+4. **Implementar → Nueva implementación → Aplicación web**, con **Ejecutar como: yo** y **Acceso: cualquier usuario**.
+5. Copia la URL que termina en `/exec`, pégala en **Ajustes** junto con la clave y pulsa **Probar conexión**.
+6. Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
-## Desarrollo
-JavaScript vanilla con módulos ES y service worker, sin bundler.
+Si cargas datos en la hoja por tu cuenta, escribe los valores en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`.
+
+## Stack
+JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler.
 
 ```
-python3 -m http.server 8000
+python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
+
+Versión actual: `diff-review v0.2.0`.
+
+---
+
+Más proyectos: https://juliangdeveloper.github.io/
