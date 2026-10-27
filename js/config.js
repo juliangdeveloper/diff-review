@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.2.3";
+export const APP_VERSION = "0.2.4";
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
@@ -103,11 +103,23 @@ export const META = Object.freeze({
   VALUE: "value",
 });
 
+export const GRAPH = Object.freeze({
+  RULE: "graph_rule",
+  LABEL: "graph_label",
+  ORDER: "graph_order",
+  TO: "graph_to",
+});
+
 export const HEADERS = Object.freeze({
   [TAB.COMMITS]: Object.freeze(Object.values(COMMIT)),
   [TAB.DIFFS]: Object.freeze(Object.values(DIFF)),
   [TAB.REVIEWS]: Object.freeze(Object.values(REVIEW)),
   [TAB.META]: Object.freeze(Object.values(META)),
+});
+
+export const OPTIONAL = Object.freeze({
+  [TAB.COMMITS]: Object.freeze([GRAPH.RULE]),
+  [TAB.DIFFS]: Object.freeze([GRAPH.LABEL, GRAPH.ORDER, GRAPH.TO]),
 });
 
 export const STATUS = Object.freeze({

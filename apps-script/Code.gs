@@ -52,6 +52,17 @@ var HEADERS_ = Object.freeze({
   meta: ["key", "value"],
 });
 
+// Optional. Old sheets keep working without them. load and diffs already return
+// every column that exists; the app reads these names when the header is present.
+// graph_rule: diagram title on commits. graph_label: phrase per file.
+// graph_order: block order. graph_to: destination file_path values, separated by |.
+var OPTIONAL_HEADERS_ = Object.freeze({
+  commits: ["graph_rule"],
+  diffs: ["graph_label", "graph_order", "graph_to"],
+  reviews: [],
+  meta: [],
+});
+
 var ACTION_ = Object.freeze({
   PING: "ping",
   LOAD: "load",
@@ -245,9 +256,15 @@ function repair_(ss) {
     var tab = TAB_ORDER_[i];
     var sheet = ss.getSheetByName(tab) || ss.insertSheet(tab, ss.getSheets().length);
     var gap = missingHeaders_(sheet, tab);
-    if (!gap.missing.length) continue;
-    writeText_(sheet.getRange(1, gap.start, 1, gap.missing.length), [gap.missing]);
-    sheet.getRange(1, 1, sheet.getMaxRows(), Math.max(sheet.getLastColumn(), HEADERS_[tab].length)).setNumberFormat(TEXT_FORMAT_);
+    var columns = gap.missing.slice();
+    if (gap.start === 1) {
+      var optional = OPTIONAL_HEADERS_[tab] || [];
+      for (var k = 0; k < optional.length; k += 1) columns.push(optional[k]);
+    }
+    if (!columns.length) continue;
+    writeText_(sheet.getRange(1, gap.start, 1, columns.length), [columns]);
+    var width = Math.max(gap.start + columns.length - 1, HEADERS_[tab].length);
+    sheet.getRange(1, 1, sheet.getMaxRows(), width).setNumberFormat(TEXT_FORMAT_);
     if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
   }
   var meta = ss.getSheetByName(TAB_.META);

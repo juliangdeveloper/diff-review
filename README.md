@@ -9,6 +9,7 @@
 ## Cómo se usa
 - En **Commits** ves la lista con su estado y la filtras por rama o estado; **Ramas** agrupa los commits por rama.
 - Abre un commit para leer el diff de cada archivo, con números de línea y ajuste de líneas largas.
+- **Graph**, en ese detalle, dibuja un bloque por archivo si la hoja trae la regla y las conexiones. Tocar un bloque abre el diff de ese archivo. Si el commit no trae datos de grafo, el detalle sigue igual.
 - **Aprobar**, **Rechazar** o **Comentar**, con un comentario opcional; el comentario no cambia el estado.
 - En **Historial** revisas todas las revisiones, de la más reciente a la más antigua.
 - En **Ajustes** puedes poner un nombre de revisor para firmar tus revisiones.
@@ -22,7 +23,7 @@ La app lee y escribe en una hoja de Google a través de un Apps Script que publi
 4. **Implementar → Nueva implementación → Aplicación web**, con **Ejecutar como: yo** y **Acceso: cualquier usuario**; acepta los permisos.
 5. Copia la URL que termina en `/exec`, pégala en **Ajustes** junto con la clave y pulsa **Probar conexión**.
 
-La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `diffs`, `reviews`, `meta`) y columnas en la primera conexión. El menú **diff-review → Inicializar** de la hoja hace lo mismo a mano.
+La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `diffs`, `reviews`, `meta`) y columnas en la primera conexión. El menú **diff-review → Inicializar** de la hoja hace lo mismo a mano. Una hoja nueva también recibe las columnas opcionales del grafo: `graph_rule` en commits y `graph_label`, `graph_order`, `graph_to` en diffs. Una hoja que ya tiene sus columnas no se modifica; si esas cabeceras no están, las filas viejas siguen igual y Graph no inventa el diagrama.
 
 Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
@@ -35,7 +36,7 @@ JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps 
 python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
-Versión actual: `diff-review v0.2.3`.
+Versión actual: `diff-review v0.2.4`.
 
 ---
 
