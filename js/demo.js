@@ -1,4 +1,4 @@
-import { COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, HEADERS, REVIEW, SCHEMA_VERSION, STATUS, TAB } from "./config.js";
+import { COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, GRAPH, HEADERS, OPTIONAL, REVIEW, SCHEMA_VERSION, STATUS, TAB } from "./config.js";
 import { AppError } from "./errors.js";
 import { parsePatch } from "./diff.js";
 
@@ -13,6 +13,7 @@ const COMMITS = [
     [COMMIT.AUTHOR]: "Persona Ejemplo",
     [COMMIT.DATE]: "2026-10-20T15:42:00-05:00",
     [COMMIT.MESSAGE]: "Agrega total con descuento al carrito\n\nCalcula el descuento por cupón antes de los impuestos.",
+    [GRAPH.RULE]: "El cupón entra antes del IVA",
     [COMMIT.PARENT]: "0f1e2d3c4b5a69788796a5b4c3d2e1f00a1b2c3d",
     [COMMIT.STATUS]: STATUS.PENDING,
   },
@@ -96,9 +97,9 @@ const TEST_PATCH = [
 ].join("\n");
 
 const DIFFS = [
-  { sha: COMMITS[0][COMMIT.SHA], path: "src/cart.js", change: "M", patch: CART_PATCH },
-  { sha: COMMITS[0][COMMIT.SHA], path: "src/coupons.js", change: "A", patch: COUPON_PATCH },
-  { sha: COMMITS[0][COMMIT.SHA], path: "test/cart.test.js", change: "M", patch: TEST_PATCH },
+  { sha: COMMITS[0][COMMIT.SHA], path: "src/cart.js", change: "M", patch: CART_PATCH, label: "Total con descuento", order: "2", to: "test/cart.test.js" },
+  { sha: COMMITS[0][COMMIT.SHA], path: "src/coupons.js", change: "A", patch: COUPON_PATCH, label: "Tasa del cupón", order: "1", to: "src/cart.js" },
+  { sha: COMMITS[0][COMMIT.SHA], path: "test/cart.test.js", change: "M", patch: TEST_PATCH, label: "Prueba el cupón", order: "3" },
   {
     sha: COMMITS[1][COMMIT.SHA], path: "src/money.js", oldPath: "src/price-utils.js", change: "R",
     patch: "@@ -1,11 +1,3 @@\n-export function toCents(value) {\n-  return Math.round(value * 100);\n-}\n-\n-export function fromCents(value) {\n-  return value / 100;\n-}\n-\n export function formatMoney(value) {\n-  return \"$\" + value;\n+  return new Intl.NumberFormat(\"es-CO\", { style: \"currency\", currency: \"COP\" }).format(value);\n }",
@@ -146,7 +147,7 @@ const REVIEWS = [
 ];
 
 function toValues(tab, rows) {
-  const header = HEADERS[tab];
+  const header = HEADERS[tab].concat(OPTIONAL[tab] || []);
   return [header.slice(), ...rows.map((row) => header.map((name) => String(row[name] ?? "")))];
 }
 
@@ -159,6 +160,9 @@ function diffRow(item) {
     [DIFF.CHUNK]: "0",
     [DIFF.CHUNKS]: "1",
     [DIFF.PATCH]: item.patch,
+    [GRAPH.LABEL]: item.label || "",
+    [GRAPH.ORDER]: item.order || "",
+    [GRAPH.TO]: item.to || "",
   };
 }
 

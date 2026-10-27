@@ -9,6 +9,7 @@ import {
 } from "./script.js";
 import { createDemoBackend } from "./demo.js";
 import { parsePatch, renderLines } from "./diff.js";
+import { buildGraph, clearGraph, graphPanel } from "./graph.js";
 import {
   branchSummary, commitStats, commitStatus, filesFor, firstLine, newId,
   restLines, reviewsFor, SHORT_SHA_LENGTH, shortSha, sortCommits, sortReviews, uniqueValues,
@@ -489,6 +490,7 @@ function fileNode(file, autoOpen) {
   const incomplete = file.received < file.total;
   const renamed = file.oldPath && file.oldPath !== file.path;
   const details = h("details", { class: "file" });
+  details.dataset.path = file.path;
   const tags = [];
   if (parsed.binary) tags.push("binario");
   if (large) tags.push(`${parsed.lines.length} líneas`);
@@ -523,6 +525,7 @@ function fileNode(file, autoOpen) {
 }
 
 function filesSection(commit) {
+  clearGraph();
   const wrap = setting(STORAGE.WRAP) !== "0";
   const section = h("section", { class: wrap ? "files wrap" : "files" });
   const list = h("div", { class: "file-list" }, h("p", { class: "loading", text: "Cargando diffs…" }));
@@ -533,11 +536,15 @@ function filesSection(commit) {
     wrapBtn.setAttribute("aria-pressed", String(next));
     saveSetting(STORAGE.WRAP, next ? "1" : "0");
   });
+  const graphBtn = h("button", {
+    class: "pill", type: "button", id: "graph-toggle", text: "Graph", "aria-pressed": "false", disabled: true,
+  });
   const toggleAll = (open) => list.querySelectorAll("details.file").forEach((d) => { d.open = open; });
   section.append(
     h("div", { class: "files-head" },
       h("h2", { class: "section-title", id: "files-title", text: "Archivos" }),
       h("div", { class: "pills" },
+        graphBtn,
         wrapBtn,
         h("button", { class: "pill", type: "button", onclick: () => toggleAll(true), text: "Abrir" }),
         h("button", { class: "pill", type: "button", onclick: () => toggleAll(false), text: "Cerrar" }))),
@@ -551,6 +558,29 @@ function filesSection(commit) {
       list.replaceChildren(...(files.length
         ? files.map((file) => fileNode(file, autoOpen))
         : [h("p", { class: "note", text: "Este commit no tiene diffs en la hoja." })]));
+      const graph = buildGraph(commit, table.rows);
+      let panel = null;
+      const openFile = (path) => {
+        let target = null;
+        list.querySelectorAll("details.file").forEach((node) => {
+          const match = node.dataset.path === path;
+          if (match) target = node;
+          node.classList.toggle("graph-target", match);
+          if (node.open !== match) node.open = match;
+        });
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+      graphBtn.disabled = false;
+      graphBtn.addEventListener("click", () => {
+        const open = graphBtn.getAttribute("aria-pressed") !== "true";
+        graphBtn.setAttribute("aria-pressed", String(open));
+        panel?.remove();
+        clearGraph();
+        panel = null;
+        if (!open) return;
+        panel = graphPanel(graph, openFile);
+        list.before(panel);
+      });
     })
     .catch((err) => {
       handleError(err);
@@ -677,6 +707,7 @@ function fillSetup() {
     h("pre", { class: "code-block", tabindex: "0" }, code),
     h("h3", { text: "Pestañas y columnas" }),
     h("p", { class: "hint" }, Object.entries(HEADERS).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))),
+    h("p", { class: "hint", text: "Opcionales, para Graph. Si no están, el commit se ve como siempre. Una hoja nueva las recibe; una hoja ya armada no se modifica. commits: graph_rule. diffs: graph_label, graph_order, graph_to. graph_rule es el título, graph_label la frase del archivo, graph_order el orden y graph_to los file_path de destino separados por |." }),
     h("p", { class: "hint", text: "Carga commits y diffs en modo RAW. patch va en fragmentos de hasta 40.000 caracteres y chunk_index empieza en 0. La app escribe en reviews y en commits.status." }));
   loadCode()
     .then((text) => {

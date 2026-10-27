@@ -1,4 +1,4 @@
-import { DIFF, ERROR, HEADERS, SCHEMA_VERSION, TAB } from "./config.js";
+import { DIFF, ERROR, HEADERS, OPTIONAL, SCHEMA_VERSION, TAB } from "./config.js";
 import { AppError } from "./errors.js";
 
 const HEADER_ROW = 1;
@@ -18,12 +18,14 @@ export function parseTable(values, tab) {
   });
   const missing = HEADERS[tab].filter((name) => !(name in index));
   if (missing.length) throw new AppError(ERROR.HEADERS, `${tab}: ${missing.join(", ")}`);
+  const fields = HEADERS[tab].concat(OPTIONAL[tab] || []);
   const rows = [];
   for (let r = 1; r < table.length; r += 1) {
     const line = table[r] || [];
     if (!line.some((cell) => String(cell ?? "").trim())) continue;
     const row = { _row: r + HEADER_ROW };
-    for (const name of HEADERS[tab]) {
+    for (const name of fields) {
+      if (!(name in index)) continue;
       const raw = String(line[index[name]] ?? "");
       row[name] = name === DIFF.PATCH ? raw : raw.trim();
     }
