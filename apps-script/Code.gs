@@ -52,10 +52,6 @@ var HEADERS_ = Object.freeze({
   meta: ["key", "value"],
 });
 
-// Optional. Old sheets keep working without them. load and diffs already return
-// every column that exists; the app reads these names when the header is present.
-// graph_rule: diagram title on commits. graph_label: phrase per file.
-// graph_order: block order. graph_to: destination file_path values, separated by |.
 var OPTIONAL_HEADERS_ = Object.freeze({
   commits: ["graph_rule"],
   diffs: ["graph_label", "graph_order", "graph_to"],
