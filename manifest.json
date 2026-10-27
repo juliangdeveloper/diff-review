@@ -1,0 +1,20 @@
+{
+  "name": "Diff Review",
+  "short_name": "Diffs",
+  "description": "Revisa diffs de commits guardados en Google Sheets.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
+  "lang": "es-CO",
+  "version": "0.1.0",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
