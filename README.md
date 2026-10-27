@@ -16,12 +16,13 @@
 ## Conectar tu hoja
 La app lee y escribe en una hoja de Google a través de un Apps Script que publicas tú. La URL y la clave se guardan solo en tu navegador, nunca en el repositorio. Dentro de la app, **Cómo preparar la hoja** trae estos pasos y el script listo para copiar.
 
-1. Abre [script.new](https://script.new) para crear un proyecto de Apps Script.
-2. Borra el ejemplo y pega el contenido de [`apps-script/Code.gs`](apps-script/Code.gs).
-3. Elige la función `setup`, pulsa **Ejecutar** y acepta los permisos. La hoja `diff-review` aparece en la raíz de **Mi unidad**; puedes moverla a otra carpeta.
-4. En **Configuración del proyecto → Propiedades del script**, crea `SECRET` con una clave larga.
-5. **Implementar → Nueva implementación → Aplicación web**, con **Ejecutar como: yo** y **Acceso: cualquier usuario**.
-6. Copia la URL que termina en `/exec`, pégala en **Ajustes** junto con la clave y pulsa **Probar conexión**.
+1. Crea una hoja vacía en [sheets.new](https://sheets.new).
+2. En la hoja: **Extensiones → Apps Script**, borra el ejemplo y pega el contenido de [`apps-script/Code.gs`](apps-script/Code.gs).
+3. En **Configuración del proyecto → Propiedades del script**, crea `SECRET` con una clave larga.
+4. **Implementar → Nueva implementación → Aplicación web**, con **Ejecutar como: yo** y **Acceso: cualquier usuario**; acepta los permisos.
+5. Copia la URL que termina en `/exec`, pégala en **Ajustes** junto con la clave y pulsa **Probar conexión**.
+
+La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `diffs`, `reviews`, `meta`) y columnas en la primera conexión. El menú **diff-review → Inicializar** de la hoja hace lo mismo a mano.
 
 Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
@@ -34,7 +35,7 @@ JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps 
 python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
-Versión actual: `diff-review v0.2.1`.
+Versión actual: `diff-review v0.2.2`.
 
 ---
 

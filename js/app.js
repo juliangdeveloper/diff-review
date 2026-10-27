@@ -53,17 +53,15 @@ const ERROR_TEXT = Object.freeze({
   [ERROR.NOT_FOUND]: "No se encontró el commit en la hoja: ",
   [ERROR.DECISION]: "Decisión no válida: ",
   [ERROR.LOCK]: "La hoja está ocupada. Intenta otra vez.",
-  [ERROR.SETUP]: "Falta crear la hoja. En Apps Script elige la función setup y pulsa Ejecutar.",
-  [ERROR.SHEET]: "El script no puede abrir la hoja guardada en SHEET_ID. Si la borraste, elimina SHEET_ID de las propiedades del script y ejecuta setup otra vez.",
+  [ERROR.CONTAINER]: "El script no está dentro de una hoja. Crea la hoja con sheets.new y pega Code.gs en Extensiones → Apps Script.",
   [ERROR.SERVER]: "La aplicación web devolvió un error. Revisa la hoja y Code.gs.",
 });
 const SETUP_STEPS = Object.freeze([
-  ["Abre script.new.", "Crea un proyecto de Apps Script con tu cuenta de Google."],
-  ["Pega Code.gs.", "Borra el ejemplo y pega todo el archivo."],
-  ["Ejecuta setup una vez.", "Elige la función setup arriba y pulsa Ejecutar. Acepta los permisos. La hoja diff-review aparece en la raíz de Mi unidad; puedes moverla a otra carpeta."],
+  ["Crea una hoja vacía.", "Abre sheets.new con tu cuenta de Google."],
+  ["Pega Code.gs.", "En la hoja: Extensiones → Apps Script. Borra el ejemplo, pega todo el archivo y guarda."],
   ["Crea la clave.", "Configuración del proyecto → Propiedades del script → SECRET con una clave larga. No la escribas en el código."],
-  ["Publica la aplicación web.", "Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Acceso: cualquier usuario. Copia la URL que termina en /exec."],
-  ["Conecta la app.", "En Ajustes pega la URL y la clave y pulsa Probar conexión. Se guardan solo en este navegador."],
+  ["Publica la aplicación web.", "Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Acceso: cualquier usuario. Acepta los permisos y copia la URL que termina en /exec."],
+  ["Conecta la app.", "En Ajustes pega la URL y la clave y pulsa Probar conexión. La hoja se llama diff-review y recibe sus pestañas y columnas sola."],
   ["Si cambias Code.gs.", "Implementar → Gestionar implementaciones → Editar → Nueva versión. La URL no cambia."],
 ]);
 const DEMO = new URLSearchParams(location.search).get(DEMO_PARAM) === DEMO_ON;
@@ -666,9 +664,9 @@ function fillSetup() {
   const code = h("code", { id: "setup-code", text: "Cargando Code.gs…" });
   const copy = h("button", { class: "btn primary", type: "button", id: "setup-copy", disabled: true, onclick: copyCode, text: "Copiar Code.gs" });
   body.replaceChildren(
-    h("p", { class: "hint", text: "Solo necesitas Apps Script: setup crea la hoja en tu Drive. La URL y la clave se guardan solo en este navegador." }),
+    h("p", { class: "hint", text: "Basta una hoja vacía: el script le pone el nombre, las pestañas y las columnas. La URL y la clave se guardan solo en este navegador." }),
     h("div", { class: "setup-downloads" },
-      h("a", { class: "btn primary", id: "setup-new-script", href: URLS.NEW_SCRIPT, target: "_blank", rel: "noopener", text: "Abrir script.new" })),
+      h("a", { class: "btn primary", id: "setup-new-sheet", href: URLS.NEW_SHEET, target: "_blank", rel: "noopener", text: "Crear hoja vacía" })),
     h("h3", { text: "Pasos" }),
     h("ol", { class: "steps" }, SETUP_STEPS.map(([title, text]) => h("li", {}, h("strong", { text: title }), " ", text))),
     h("h3", { text: "Code.gs" }),
