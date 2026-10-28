@@ -3,6 +3,7 @@ import { COMMIT, DIFF, GRAPH } from "./config.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ARROW_ID = "commit-graph-arrow";
 const TARGET_SPLIT = /[|\r\n]+/;
+const STEP_MS = 2000;
 
 let unmount = () => {};
 
@@ -92,29 +93,61 @@ export function clearGraph() {
   unmount = () => {};
 }
 
-function nodeButton(node, rowIndex, onSelect) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "graph-node";
-  button.dataset.path = node.path;
-  button.dataset.row = String(rowIndex);
+function nodeCard(node) {
+  const card = document.createElement("div");
+  card.className = "graph-node";
+  card.dataset.path = node.path;
   const phrase = node.label;
-  button.setAttribute("aria-label", phrase
-    ? `${phrase}. ${node.path}. Abre el diff de este archivo.`
-    : `${node.path}. Abre el diff de este archivo.`);
-  button.title = phrase ? `${phrase} — ${node.path}` : node.path;
+  card.title = phrase ? `${phrase} — ${node.path}` : node.path;
   if (phrase) {
     const phraseEl = document.createElement("span");
     phraseEl.className = "graph-phrase";
     phraseEl.textContent = phrase;
-    button.append(phraseEl);
+    card.append(phraseEl);
   }
   const fileEl = document.createElement("span");
   fileEl.className = phrase ? "graph-file" : "graph-phrase";
   fileEl.textContent = node.path;
-  button.append(fileEl);
-  button.addEventListener("click", () => onSelect(node.path));
-  return button;
+  card.append(fileEl);
+  return card;
+}
+
+function orderOf(node) {
+  return node?.order == null ? Number.POSITIVE_INFINITY : node.order;
+}
+
+function graphFrames(graph) {
+  const byPath = new Map(graph.nodes.map((node) => [node.path, node]));
+  const incident = new Set();
+  const frames = [];
+  const edges = [...graph.edges].sort((a, b) => orderOf(byPath.get(a.from)) - orderOf(byPath.get(b.from))
+    || orderOf(byPath.get(a.to)) - orderOf(byPath.get(b.to))
+    || a.from.localeCompare(b.from)
+    || a.to.localeCompare(b.to));
+  for (const edge of edges) {
+    incident.add(edge.from);
+    incident.add(edge.to);
+    frames.push({
+      nodes: [byPath.get(edge.from), byPath.get(edge.to)],
+      edges: [edge],
+      sort: orderOf(byPath.get(edge.from)),
+    });
+  }
+  for (const node of graph.nodes) {
+    if (incident.has(node.path)) continue;
+    frames.push({ nodes: [node], edges: [], sort: orderOf(node) });
+  }
+  return frames
+    .map((frame, seq) => ({ ...frame, seq }))
+    .sort((a, b) => a.sort - b.sort || a.seq - b.seq)
+    .map((frame) => ({ nodes: frame.nodes, edges: frame.edges }));
+}
+
+function frameLabel(graph, frame) {
+  const parts = [];
+  if (graph.rule) parts.push(graph.rule);
+  for (const node of frame.nodes) parts.push(node.label || node.path);
+  return parts.join(". ");
 }
 
 function boxOf(el, root) {
@@ -394,7 +427,7 @@ function drawEdges(flow, edges) {
   }
 }
 
-export function graphPanel(graph, onSelect) {
+export function graphPanel(graph) {
   clearGraph();
   if (!graph) {
     const note = document.createElement("p");
@@ -424,30 +457,133 @@ export function graphPanel(graph, onSelect) {
     return section;
   }
 
+  const frames = graphFrames(graph);
   const flow = document.createElement("div");
-  flow.className = graph.edges.length ? "graph-flow" : "graph-flow solo";
+  flow.className = "graph-flow";
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "graph-arrows");
   svg.setAttribute("aria-hidden", "true");
   flow.append(svg);
-  graphRows(graph.nodes).forEach((row, index) => {
-    const rowEl = document.createElement("div");
-    rowEl.className = "graph-row";
-    for (const node of row.nodes) rowEl.append(nodeButton(node, index, onSelect));
-    flow.append(rowEl);
-  });
   section.append(flow);
+
+  let index = 0;
+  let timer = 0;
+  let paused = false;
+  let remaining = STEP_MS;
+  let mark = 0;
+  let paintGen = 0;
+  const held = new Set();
 
   const draw = () => {
     if (!flow.isConnected) return;
-    drawEdges(flow, graph.edges);
+    const frame = frames[index];
+    const present = [...flow.querySelectorAll(".graph-node")].map((el) => el.dataset.path);
+    if (present.length !== frame.nodes.length || frame.nodes.some((node) => !present.includes(node.path))) return;
+    drawEdges(flow, frame.edges);
   };
+
+  const paint = () => {
+    const gen = ++paintGen;
+    const frame = frames[index];
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    flow.className = frame.edges.length ? "graph-flow" : "graph-flow solo";
+    flow.dataset.paths = frame.nodes.map((node) => node.path).join("\n");
+    if (!reduce) flow.classList.add("is-swap");
+    flow.querySelectorAll(".graph-row").forEach((row) => row.remove());
+    graphRows(frame.nodes).forEach((row) => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "graph-row";
+      for (const node of row.nodes) rowEl.append(nodeCard(node));
+      flow.append(rowEl);
+    });
+    section.setAttribute("aria-label", frameLabel(graph, frame));
+    requestAnimationFrame(() => {
+      if (gen !== paintGen) return;
+      draw();
+      requestAnimationFrame(() => {
+        if (gen !== paintGen) return;
+        flow.classList.remove("is-swap");
+        draw();
+      });
+    });
+  };
+
+  const arm = () => {
+    clearTimeout(timer);
+    if (paused || frames.length < 2 || !section.isConnected) return;
+    mark = performance.now();
+    timer = setTimeout(() => {
+      if (!section.isConnected) {
+        clearGraph();
+        return;
+      }
+      index = (index + 1) % frames.length;
+      remaining = STEP_MS;
+      paint();
+      arm();
+    }, remaining);
+  };
+
+  const pause = () => {
+    if (paused) return;
+    paused = true;
+    section.dataset.paused = "true";
+    if (mark) remaining = Math.max(0, remaining - (performance.now() - mark));
+    clearTimeout(timer);
+  };
+
+  const resume = () => {
+    if (!paused) return;
+    paused = false;
+    delete section.dataset.paused;
+    if (remaining <= 0 && frames.length > 1) {
+      index = (index + 1) % frames.length;
+      remaining = STEP_MS;
+      paint();
+    }
+    arm();
+  };
+
+  const onDown = (event) => {
+    if (!section.isConnected) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    held.add(event.pointerId);
+    pause();
+  };
+
+  const onUp = (event) => {
+    if (!held.has(event.pointerId)) return;
+    held.delete(event.pointerId);
+    if (!section.isConnected) {
+      clearGraph();
+      return;
+    }
+    if (!held.size) resume();
+  };
+
+  const removal = new MutationObserver(() => {
+    if (!section.isConnected) clearGraph();
+  });
+
+  section.addEventListener("pointerdown", onDown);
+  section.addEventListener("contextmenu", (event) => event.preventDefault());
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
   const observer = new ResizeObserver(draw);
   observer.observe(flow);
-  unmount = () => observer.disconnect();
+  unmount = () => {
+    clearTimeout(timer);
+    observer.disconnect();
+    removal.disconnect();
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    held.clear();
+  };
+  paint();
   requestAnimationFrame(() => {
-    draw();
-    requestAnimationFrame(draw);
+    if (!section.isConnected) return;
+    if (section.parentNode) removal.observe(section.parentNode, { childList: true });
+    arm();
   });
   return section;
 }

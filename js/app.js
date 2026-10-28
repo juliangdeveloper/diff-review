@@ -571,16 +571,6 @@ function filesSection(commit) {
         : [h("p", { class: "note", text: "Este commit no tiene diffs en la hoja." })]));
       const graph = buildGraph(commit, table.rows);
       let panel = null;
-      const openFile = (path) => {
-        let target = null;
-        list.querySelectorAll("details.file").forEach((node) => {
-          const match = node.dataset.path === path;
-          if (match) target = node;
-          node.classList.toggle("graph-target", match);
-          if (node.open !== match) node.open = match;
-        });
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
-      };
       graphBtn.disabled = false;
       graphBtn.addEventListener("click", () => {
         const open = graphBtn.getAttribute("aria-pressed") !== "true";
@@ -589,7 +579,7 @@ function filesSection(commit) {
         clearGraph();
         panel = null;
         if (!open) return;
-        panel = graphPanel(graph, openFile);
+        panel = graphPanel(graph);
         list.before(panel);
       });
     })
@@ -836,6 +826,7 @@ function viewSettings() {
 }
 
 function render() {
+  clearGraph();
   const { name, params } = parseRoute();
   const tab = TAB_ROUTE[name];
   document.querySelectorAll(".tabbar a").forEach((a) => {
