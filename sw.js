@@ -1,4 +1,4 @@
-const CACHE = "diff-review-v0.2.6";
+const CACHE = "diff-review-v0.2.7";
 const ASSETS = [
   "./",
   "./index.html",
