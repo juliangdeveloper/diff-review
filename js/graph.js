@@ -3,7 +3,6 @@ import { COMMIT, DIFF, GRAPH } from "./config.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ARROW_ID = "commit-graph-arrow";
 const TARGET_SPLIT = /[|\r\n]+/;
-const HEAD = 7;
 
 let unmount = () => {};
 
@@ -133,52 +132,199 @@ function boxOf(el, root) {
   };
 }
 
-function slotX(box, slot, slots) {
-  if (slots <= 1) return box.cx;
-  const inset = Math.min(28, box.width * 0.22);
-  const start = box.left + inset;
-  const end = box.right - inset;
-  return start + ((end - start) * slot) / (slots - 1);
+const CLEAR = 6;
+const RAIL = 8;
+const PADS = [CLEAR, 3, 0];
+const OUT = Object.freeze({
+  top: Object.freeze({ x: 0, y: -1 }),
+  bottom: Object.freeze({ x: 0, y: 1 }),
+  left: Object.freeze({ x: -1, y: 0 }),
+  right: Object.freeze({ x: 1, y: 0 }),
+});
+
+function snapBox(box) {
+  const left = Math.floor(box.left);
+  const top = Math.floor(box.top);
+  const right = Math.ceil(box.right);
+  const bottom = Math.ceil(box.bottom);
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    cx: Math.round((left + right) / 2),
+    cy: Math.round((top + bottom) / 2),
+  };
 }
 
-function sideRoute(a, b) {
-  const forward = b.cx >= a.cx;
-  const x1 = forward ? a.right : a.left;
-  const x2 = (forward ? b.left : b.right) + (forward ? -HEAD : HEAD);
-  if (Math.abs(a.cy - b.cy) < 8) return `M ${x1} ${a.cy} L ${x2} ${b.cy}`;
-  const mid = (x1 + x2) / 2;
-  return `M ${x1} ${a.cy} L ${mid} ${a.cy} L ${mid} ${b.cy} L ${x2} ${b.cy}`;
-}
-
-function verticalRoute(edge) {
-  const { a, b } = edge;
-  const down = b.cy >= a.cy;
-  const x1 = a.cx;
-  const x2 = slotX(b, edge.slot, edge.slots);
-  const y1 = down ? a.bottom : a.top;
-  const y2 = (down ? b.top : b.bottom) + (down ? -HEAD : HEAD);
-  if (Math.abs(x1 - x2) < 10) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const mid = (y1 + y2) / 2;
-  return `M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`;
-}
-
-function routeEdge(edge) {
-  const { a, b } = edge;
-  const below = b.top - a.bottom;
-  const above = a.top - b.bottom;
-  if ((below > 6 || above > 6) && Math.abs(a.row - b.row) > 1 && Math.max(below, above) > 80) {
-    return { rail: true };
+function crosses(x1, y1, x2, y2, box) {
+  if (x1 === x2) {
+    if (x1 <= box.left || x1 >= box.right) return false;
+    const lo = Math.min(y1, y2);
+    const hi = Math.max(y1, y2);
+    return hi > box.top && lo < box.bottom;
   }
-  if (below > 6 || above > 6) return { rail: false, d: verticalRoute(edge) };
-  if (b.left - a.right > 4 || a.left - b.right > 4) return { rail: false, d: sideRoute(a, b) };
-  return { rail: false, d: verticalRoute(edge) };
+  if (y1 === y2) {
+    if (y1 <= box.top || y1 >= box.bottom) return false;
+    const lo = Math.min(x1, x2);
+    const hi = Math.max(x1, x2);
+    return hi > box.left && lo < box.right;
+  }
+  return true;
 }
 
-function railRoute(edge, lane, width) {
-  const { a, b } = edge;
-  const x = Math.min(width - 6, Math.max(a.right, b.right) + 14 + lane * 12);
-  const x2 = b.right + HEAD;
-  return `M ${a.right} ${a.cy} L ${x} ${a.cy} L ${x} ${b.cy} L ${x2} ${b.cy}`;
+function hits(x1, y1, x2, y2, boxes, pad) {
+  for (let i = 0; i < boxes.length; i += 1) {
+    const box = boxes[i];
+    const grown = pad
+      ? { left: box.left - pad, top: box.top - pad, right: box.right + pad, bottom: box.bottom + pad }
+      : box;
+    if (crosses(x1, y1, x2, y2, grown)) return true;
+  }
+  return false;
+}
+
+function approach(a, b) {
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  if (Math.abs(dy) >= Math.abs(dx)) return dy >= 0 ? "top" : "bottom";
+  return dx >= 0 ? "left" : "right";
+}
+
+function spread(min, max, slot, slots) {
+  if (!(max > min) || slots <= 1) return Math.round((min + max) / 2);
+  const inset = Math.min(12, Math.floor((max - min) / 4));
+  const start = min + inset;
+  const end = max - inset;
+  if (end <= start) return Math.round((min + max) / 2);
+  return Math.round(start + ((end - start) * slot) / (slots - 1));
+}
+
+function exitSide(entry) {
+  if (entry === "top") return "bottom";
+  if (entry === "bottom") return "top";
+  if (entry === "left") return "right";
+  return "left";
+}
+
+function portOn(box, side, slot, slots) {
+  if (side === "top" || side === "bottom") {
+    const x = spread(box.left + 1, box.right - 1, slot, slots);
+    return { x, y: side === "top" ? box.top : box.bottom };
+  }
+  const y = spread(box.top + 1, box.bottom - 1, slot, slots);
+  return { x: side === "left" ? box.left : box.right, y };
+}
+
+function shift(point, side, dist) {
+  const step = OUT[side];
+  return { x: point.x + step.x * dist, y: point.y + step.y * dist };
+}
+
+function sortedUnique(values) {
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function routeClear(start, goal, boxes, width, height, pad) {
+  const q = shift(start, start.side, pad);
+  const r = shift(goal, goal.side, pad);
+  const xs = sortedUnique([
+    -RAIL,
+    width + RAIL,
+    q.x,
+    r.x,
+    ...boxes.flatMap((box) => [box.left - pad, box.right + pad]),
+  ]);
+  const ys = sortedUnique([
+    q.y,
+    r.y,
+    ...boxes.flatMap((box) => [box.top - pad, box.bottom + pad]),
+  ]);
+  const xAt = new Map(xs.map((value, index) => [value, index]));
+  const yAt = new Map(ys.map((value, index) => [value, index]));
+  if (!xAt.has(q.x) || !yAt.has(q.y) || !xAt.has(r.x) || !yAt.has(r.y)) return null;
+  const key = (i, j) => i * ys.length + j;
+  const startKey = key(xAt.get(q.x), yAt.get(q.y));
+  const goalKey = key(xAt.get(r.x), yAt.get(r.y));
+  const open = [startKey];
+  const gScore = new Map([[startKey, 0]]);
+  const fScore = new Map([[startKey, Math.abs(r.x - q.x) + Math.abs(r.y - q.y)]]);
+  const prev = new Map();
+  const seen = new Set();
+  while (open.length) {
+    let best = 0;
+    for (let i = 1; i < open.length; i += 1) {
+      if (fScore.get(open[i]) < fScore.get(open[best])) best = i;
+    }
+    const current = open.splice(best, 1)[0];
+    if (seen.has(current)) continue;
+    if (current === goalKey) {
+      const keys = [current];
+      while (prev.has(keys[0])) keys.unshift(prev.get(keys[0]));
+      return keys.map((id) => ({ x: xs[Math.floor(id / ys.length)], y: ys[id % ys.length] }));
+    }
+    seen.add(current);
+    const i = Math.floor(current / ys.length);
+    const j = current % ys.length;
+    const steps = [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]];
+    for (let s = 0; s < steps.length; s += 1) {
+      const [ni, nj] = steps[s];
+      if (ni < 0 || nj < 0 || ni >= xs.length || nj >= ys.length) continue;
+      const next = key(ni, nj);
+      if (seen.has(next)) continue;
+      if (hits(xs[i], ys[j], xs[ni], ys[nj], boxes, pad)) continue;
+      const cost = gScore.get(current) + Math.abs(xs[ni] - xs[i]) + Math.abs(ys[nj] - ys[j]);
+      if (cost >= (gScore.get(next) ?? Infinity)) continue;
+      gScore.set(next, cost);
+      fScore.set(next, cost + Math.abs(xs[ni] - r.x) + Math.abs(ys[nj] - r.y));
+      prev.set(next, current);
+      open.push(next);
+    }
+  }
+  return null;
+}
+
+function dedupe(points) {
+  const out = [];
+  for (const point of points) {
+    const prev = out[out.length - 1];
+    if (prev && prev.x === point.x && prev.y === point.y) continue;
+    out.push(point);
+  }
+  const merged = [];
+  for (const point of out) {
+    const a = merged[merged.length - 2];
+    const b = merged[merged.length - 1];
+    if (a && b && ((a.x === b.x && b.x === point.x) || (a.y === b.y && b.y === point.y))) merged[merged.length - 1] = point;
+    else merged.push(point);
+  }
+  return merged;
+}
+
+export function routeAround(from, to, boxes, width, height) {
+  const entry = approach(from, to);
+  const leave = exitSide(entry);
+  const source = portOn(from, leave, 0, 1);
+  const target = portOn(to, entry, to.slot || 0, to.slots || 1);
+  source.side = leave;
+  target.side = entry;
+  const end = shift(target, entry, 1);
+  for (let p = 0; p < PADS.length; p += 1) {
+    const pad = PADS[p];
+    const middle = routeClear(source, target, boxes, width, height, pad);
+    if (!middle) continue;
+    const points = dedupe([shift(source, leave, 1), ...middle, end]);
+    let blocked = false;
+    for (let i = 1; i < points.length; i += 1) {
+      if (hits(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y, boxes, 0)) blocked = true;
+    }
+    if (!blocked) return points;
+  }
+  return null;
+}
+
+function toPath(points) {
+  return points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
 }
 
 function drawEdges(flow, edges) {
@@ -186,9 +332,11 @@ function drawEdges(flow, edges) {
   if (!svg) return;
   const width = flow.clientWidth;
   const height = flow.clientHeight;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", String(width));
+  const bleed = RAIL + 4;
+  svg.setAttribute("viewBox", `${-bleed} 0 ${width + bleed * 2} ${height}`);
+  svg.setAttribute("width", String(width + bleed * 2));
   svg.setAttribute("height", String(height));
+  svg.style.left = `${-bleed}px`;
   svg.replaceChildren();
   if (!edges.length || width < 2 || height < 2) return;
 
@@ -209,36 +357,38 @@ function drawEdges(flow, edges) {
   svg.append(defs);
 
   const nodes = new Map();
+  const boxes = [];
   flow.querySelectorAll(".graph-node").forEach((el) => {
-    nodes.set(el.dataset.path, { ...boxOf(el, flow), row: Number(el.dataset.row) });
+    const box = snapBox(boxOf(el, flow));
+    nodes.set(el.dataset.path, box);
+    boxes.push(box);
   });
   const drawable = edges
     .map((edge) => ({ ...edge, a: nodes.get(edge.from), b: nodes.get(edge.to) }))
     .filter((edge) => edge.a && edge.b);
   const arrivals = new Map();
   for (const edge of drawable) {
-    const side = edge.b.row > edge.a.row ? "top" : "bottom";
+    const side = approach(edge.a, edge.b);
     const key = `${edge.to}:${side}`;
     if (!arrivals.has(key)) arrivals.set(key, []);
     arrivals.get(key).push(edge);
   }
   for (const group of arrivals.values()) {
     group.forEach((edge, index) => {
-      edge.slot = index;
-      edge.slots = group.length;
+      edge.b = { ...edge.b, slot: index, slots: group.length };
     });
   }
 
-  let lane = 0;
   for (const edge of drawable) {
+    const points = routeAround(edge.a, edge.b, boxes, width, height);
+    if (!points || points.length < 2) continue;
     const path = document.createElementNS(SVG_NS, "path");
-    const route = routeEdge(edge);
-    path.setAttribute("d", route.rail ? railRoute(edge, lane++, width) : route.d);
+    path.setAttribute("d", toPath(points));
     path.setAttribute("fill", "none");
     path.setAttribute("stroke", "#d2d2d7");
     path.setAttribute("stroke-width", "1.75");
     path.setAttribute("stroke-linejoin", "round");
-    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linecap", "butt");
     path.setAttribute("marker-end", `url(#${ARROW_ID})`);
     svg.append(path);
   }
