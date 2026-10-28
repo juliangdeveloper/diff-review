@@ -1,6 +1,6 @@
 import {
   APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
-  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, REVIEW, ROUTE, STATUS, STORAGE, URLS,
+  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE, STATUS, STORAGE, URLS,
 } from "./config.js";
 import { AppError } from "./errors.js";
 import { checkSchema, parseDiffs, parseLoad } from "./sheets.js";
@@ -75,7 +75,18 @@ function safeStorage(name) {
   }
 }
 
+function savePortfolio() {
+  const store = safeStorage("localStorage");
+  if (!store) return;
+  try {
+    store.setItem(PORTFOLIO_PREFIX + APP_ID, JSON.stringify(PORTFOLIO));
+  } catch (e) {
+    return;
+  }
+}
+
 cleanLegacy(safeStorage("localStorage"), safeStorage("sessionStorage"));
+savePortfolio();
 
 function startBackend() {
   if (DEMO) return createDemoBackend();
