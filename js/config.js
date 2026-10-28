@@ -1,5 +1,16 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.2.5";
+export const APP_VERSION = "0.2.6";
+export const PORTFOLIO_PREFIX = "meta.v1.";
+export const PORTFOLIO = Object.freeze({
+  v: 1,
+  slug: APP_ID,
+  proyecto: Object.freeze({
+    fase: 4,
+    fase_estado: 1,
+    fases_completadas: 3,
+    objetivo: "Open source para revisar diffs de commits en el celular y aprobar, rechazar o comentar.",
+  }),
+});
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
