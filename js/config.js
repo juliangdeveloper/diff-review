@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.2.4";
+export const APP_VERSION = "0.2.5";
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
