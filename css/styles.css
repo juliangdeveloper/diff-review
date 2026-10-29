@@ -546,6 +546,91 @@ select { appearance: none; -webkit-appearance: none; background-image: linear-gr
   .graph-flow { transition: none; }
 }
 
+.struct-card { display: grid; gap: 10px; margin: 8px 0 4px; min-width: 0; }
+
+.struct-file {
+  min-width: 0;
+  padding: 4px 0 8px;
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.struct-file button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.struct-file button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.struct-path { padding: 10px 14px 8px; flex-wrap: wrap; }
+.struct-path-text { flex: 1 1 60%; min-width: 0; font: 600 13px/1.35 var(--mono); overflow-wrap: anywhere; }
+.struct-counts { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.struct-count { font-weight: 600; }
+
+.struct-card ul { margin: 0; padding: 0; list-style: none; min-width: 0; }
+.struct-file > .struct-children { display: grid; gap: 6px; padding: 0 10px; }
+
+.struct-node {
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--fill);
+  border-left: 3px solid var(--muted);
+  overflow: hidden;
+}
+
+.struct-head { padding: 8px 10px; }
+.struct-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
+.struct-name { font: 600 14px/1.3 var(--mono); overflow-wrap: anywhere; }
+.struct-params { min-width: 0; color: var(--muted); font: 12px/1.3 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+.struct-kind {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.node-badge { padding: 1px 8px; font-size: 11px; }
+.struct-node .struct-children { padding: 0 6px 6px 14px; display: grid; gap: 2px; }
+.struct-node .struct-node { background: var(--card); }
+
+.struct-leaf-btn { padding: 5px 6px; border-radius: 7px; }
+.struct-leaf-btn:active, .struct-head:active, .struct-path:active { background: var(--hunk); }
+.struct-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.struct-code { flex: 1; min-width: 0; font: 12px/1.35 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.node-added { border-left-color: var(--green); }
+.node-removed { border-left-color: var(--red); }
+.node-modified { border-left-color: var(--orange); }
+.node-badge.node-added, .struct-count.node-added { background: var(--green-bg); color: var(--green); }
+.node-badge.node-removed, .struct-count.node-removed { background: var(--red-bg); color: var(--red); }
+.node-badge.node-modified, .struct-count.node-modified { background: var(--orange-bg); color: var(--orange); }
+.struct-count { padding: 0 6px; border-radius: 5px; line-height: 18px; }
+.struct-leaf.node-added .struct-dot { background: var(--green); }
+.struct-leaf.node-removed .struct-dot { background: var(--red); }
+.struct-leaf.node-modified .struct-dot { background: var(--orange); }
+.struct-leaf.node-removed .struct-code { text-decoration: line-through; color: var(--muted); }
+
+.graph-node { cursor: pointer; }
+.graph-node:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; }
+
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { box-shadow: inset 0 0 0 999px rgba(10, 132, 255, 0.28); } to { box-shadow: inset 0 0 0 999px rgba(10, 132, 255, 0); } }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 2px solid var(--blue); } }
+
 .file {
   background: var(--card);
   border-radius: var(--radius);

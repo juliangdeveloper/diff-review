@@ -1,4 +1,4 @@
-import { DIFF, ERROR, HEADERS, OPTIONAL, SCHEMA_VERSION, TAB } from "./config.js";
+import { DIFF, ERROR, HEADERS, OPTIONAL, SUPPORTED_SCHEMAS, TAB } from "./config.js";
 import { AppError } from "./errors.js";
 
 const HEADER_ROW = 1;
@@ -36,7 +36,7 @@ export function parseTable(values, tab) {
 
 export function checkSchema(body) {
   const found = String(body?.schema_version ?? "").trim();
-  if (found !== String(SCHEMA_VERSION)) throw new AppError(ERROR.SCHEMA, found);
+  if (!SUPPORTED_SCHEMAS.includes(found)) throw new AppError(ERROR.SCHEMA, found);
   return found;
 }
 
@@ -50,5 +50,7 @@ export function parseLoad(body) {
 }
 
 export function parseDiffs(body) {
-  return parseTable(body?.diffs, TAB.DIFFS);
+  const table = parseTable(body?.diffs, TAB.DIFFS);
+  table.structure = Array.isArray(body?.structure) ? parseTable(body.structure, TAB.STRUCTURE).rows : null;
+  return table;
 }

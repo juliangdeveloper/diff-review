@@ -1,4 +1,4 @@
-import { COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, GRAPH, HEADERS, OPTIONAL, REVIEW, SCHEMA_VERSION, STATUS, TAB } from "./config.js";
+import { COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, GRAPH, HEADERS, NODE, OPTIONAL, REVIEW, SCHEMA_VERSION, STATUS, TAB } from "./config.js";
 import { AppError } from "./errors.js";
 import { parsePatch } from "./diff.js";
 
@@ -116,6 +116,33 @@ const DIFFS = [
   { sha: COMMITS[3][COMMIT.SHA], path: "assets/check.png", change: "A", patch: "Binary files /dev/null and b/assets/check.png differ" },
 ];
 
+const STRUCTURE = [
+  [0, "src/cart.js", "s1", "", "function", "cartTotal", "modified", "4", "(items, coupon)"],
+  [0, "src/cart.js", "s2", "s1", "call", "const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);", "modified", "5", "reduce"],
+  [0, "src/cart.js", "s3", "s1", "return", "return Math.round(taxed);", "modified", "8", ""],
+  [0, "src/cart.js", "s4", "", "function", "cartSummary", "modified", "11", "(items, coupon)"],
+  [0, "src/cart.js", "s5", "s4", "call", "const total = cartTotal(items, coupon);", "added", "12", "cartTotal"],
+  [0, "src/cart.js", "s6", "s4", "return", "return { items: items.length, total: formatMoney(total), };", "modified", "13", ""],
+  [0, "src/coupons.js", "s1", "", "module", "(módulo)", "added", "1", ""],
+  [0, "src/coupons.js", "s2", "s1", "call", "const RATES = Object.freeze({ BIENVENIDA: 0.1, AMIGOS: 0.15, });", "added", "1", "freeze"],
+  [0, "src/coupons.js", "s3", "", "function", "couponRate", "added", "6", "(code)"],
+  [0, "src/coupons.js", "s4", "s3", "call", "const key = String(code || \"\").trim().toUpperCase();", "added", "7", "toUpperCase"],
+  [0, "src/coupons.js", "s5", "s3", "return", "return RATES[key] || 0;", "added", "8", ""],
+  [0, "test/cart.test.js", "s1", "", "module", "(módulo)", "unchanged", "1", ""],
+  [0, "test/cart.test.js", "s2", "s1", "call", "test(\"aplica el cupón antes del IVA\", () => { const items = [{ price: 1000, qty…", "modified", "8", "test"],
+  [0, "test/cart.test.js", "s3", "s1", "call", "assert.equal(cartTotal(items, \"bienvenida\"), 2142);", "added", "10", "equal"],
+  [1, "src/money.js", "s1", "", "function", "toCents", "removed", "1", "(value)"],
+  [1, "src/money.js", "s2", "s1", "return", "return Math.round(value * 100);", "removed", "2", ""],
+  [1, "src/money.js", "s3", "", "function", "formatMoney", "modified", "1", "(value)"],
+  [1, "src/money.js", "s4", "s3", "return", "return new Intl.NumberFormat(\"es-CO\", { style: \"currency\", currency: \"COP\" }).f…", "modified", "2", ""],
+  [1, "src/money.js", "s5", "", "function", "fromCents", "removed", "5", "(value)"],
+  [1, "src/money.js", "s6", "s5", "return", "return value / 100;", "removed", "6", ""],
+  [1, "src/legacy-price.js", "s1", "", "module", "(módulo)", "removed", "1", ""],
+  [2, "src/summary.js", "s1", "", "function", "renderSummary", "modified", "7", "(order)"],
+  [2, "src/summary.js", "s2", "s1", "call", "const total = formatMoney(order.total);", "added", "9", "formatMoney"],
+  [2, "src/summary.js", "s3", "s1", "return", "return [header, ...lines, total].join(\"\\n\");", "modified", "11", ""]
+];
+
 const REVIEWS = [
   {
     [REVIEW.ID]: "demo-review-0001",
@@ -176,6 +203,11 @@ function statsFor(sha) {
   };
 }
 
+function structureRow([index, ...cells]) {
+  const names = Object.values(NODE).slice(1);
+  return Object.fromEntries([[NODE.SHA, COMMITS[index][COMMIT.SHA]], ...names.map((name, i) => [name, cells[i]])]);
+}
+
 const wait = () => new Promise((resolve) => setTimeout(resolve, DELAY_MS));
 
 export function createDemoBackend() {
@@ -188,6 +220,7 @@ export function createDemoBackend() {
   }));
   const reviews = REVIEWS.map((row) => ({ ...row }));
   const diffs = DIFFS.map(diffRow);
+  const structure = STRUCTURE.map(structureRow);
   return {
     demo: true,
     async ping() {
@@ -206,7 +239,12 @@ export function createDemoBackend() {
     },
     async diffs(sha) {
       await wait();
-      return { ok: true, sha, diffs: toValues(TAB.DIFFS, diffs.filter((row) => row[DIFF.SHA] === sha)) };
+      return {
+        ok: true,
+        sha,
+        diffs: toValues(TAB.DIFFS, diffs.filter((row) => row[DIFF.SHA] === sha)),
+        structure: toValues(TAB.STRUCTURE, structure.filter((row) => row[NODE.SHA] === sha)),
+      };
     },
     async review(input) {
       await wait();

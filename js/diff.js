@@ -82,6 +82,8 @@ export function renderLines(parsed) {
   for (const line of parsed.lines) {
     const row = document.createElement("div");
     row.className = `ln ln-${line.kind}`;
+    if (line.oldNo != null) row.dataset.old = String(line.oldNo);
+    if (line.newNo != null) row.dataset.new = String(line.newNo);
     if (line.kind === LINE.HUNK || line.kind === LINE.NOTE) {
       row.appendChild(cell("code", line.text));
     } else {

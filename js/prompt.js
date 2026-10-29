@@ -1,4 +1,4 @@
-export const AI_PROMPT = `Eres un asistente que me ayuda a conectar diff-review con su fuente de datos. diff-review es una app web que muestra los diffs de commits guardados en una hoja de Google y los lee a través de un Apps Script publicado como aplicación web.
+export const aiPrompt = (base) => `Eres un asistente que me ayuda a conectar diff-review con su fuente de datos. diff-review es una app web que muestra los diffs de commits guardados en una hoja de Google y los lee a través de un Apps Script publicado como aplicación web.
 
 Guíame paso a paso: dame un paso a la vez, espera a que te confirme que lo hice y, si algo falla, pídeme el mensaje exacto que veo. No me pidas la clave ni la URL completa; usa los marcadores <URL_DEL_WEB_APP>, <SECRETO>, <ID_DE_LA_HOJA>, <REPO> y <RAMA>.
 
@@ -6,10 +6,10 @@ PARTE 1. CONECTAR LA HOJA
 
 1. Crear la hoja. Abre https://sheets.new con la cuenta de Google que guardará los datos. Basta una hoja vacía: no crees pestañas ni columnas.
 2. Pegar el script. En la hoja: Extensiones → Apps Script. Borra el código de ejemplo, pega completo el archivo apps-script/Code.gs de <REPO> (en la app también está en Ajustes → Cómo preparar la hoja → Copiar Code.gs) y guarda. El script tiene que crearse desde la hoja; un proyecto suelto en script.google.com no funciona.
-3. Inicializar (opcional). En el editor elige la función init y pulsa Ejecutar; acepta los permisos. La hoja se renombra diff-review, recibe las pestañas commits, diffs, reviews y meta con sus columnas, y meta guarda schema_version = 1. Si te lo saltas, pasa solo en la primera conexión. En la hoja también queda el menú diff-review → Inicializar.
+3. Inicializar (opcional). En el editor elige la función init y pulsa Ejecutar; acepta los permisos. La hoja se renombra diff-review, recibe las pestañas commits, diffs, structure, reviews y meta con sus columnas, y meta guarda schema_version = 2. Una hoja con schema_version = 1 se actualiza sola: el script agrega la pestaña structure y sube el valor a 2 sin tocar los datos. Si te lo saltas, pasa solo en la primera conexión. En la hoja también queda el menú diff-review → Inicializar.
 4. Crear la clave. En el editor: Configuración del proyecto → Propiedades del script → Agregar propiedad. Nombre: SECRET. Valor: una clave larga y aleatoria (<SECRETO>). Sin SECRET toda petición se rechaza. No escribas la clave en el código.
 5. Publicar. Implementar → Nueva implementación → tipo Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier usuario. Pulsa Implementar y autoriza los permisos; si Google avisa que la app no está verificada, entra a Configuración avanzada y continúa a tu proyecto. Copia la URL que termina en /exec (<URL_DEL_WEB_APP>), no la que termina en /dev.
-6. Conectar la app. En diff-review: Ajustes → URL de la aplicación web: <URL_DEL_WEB_APP>; Clave (SECRET): <SECRETO>; pulsa Probar conexión. Si todo está bien aparece «Conectado a «diff-review»: schema_version 1, N commits y M revisiones.». La URL y la clave quedan guardadas solo en ese navegador.
+6. Conectar la app. En diff-review: Ajustes → URL de la aplicación web: <URL_DEL_WEB_APP>; Clave (SECRET): <SECRETO>; pulsa Probar conexión. Si todo está bien aparece «Conectado a «diff-review»: schema_version 2, N commits y M revisiones.». La URL y la clave quedan guardadas solo en ese navegador.
 7. Si después cambias Code.gs: Implementar → Gestionar implementaciones → Editar → Versión: Nueva versión → Implementar. La URL no cambia.
 
 Mensajes de error y qué hacer:
@@ -18,7 +18,7 @@ Mensajes de error y qué hacer:
 - «La clave no coincide con SECRET…»: revisa que la propiedad se llame SECRET y que la clave sea idéntica.
 - «La aplicación web no reconoce la petición…»: Code.gs está desactualizado; pega el actual y publica una nueva versión.
 - «A la hoja le faltan pestañas» o «Faltan columnas en la hoja»: usa diff-review → Inicializar.
-- «La hoja no es compatible…»: en la pestaña meta debe haber una fila con key schema_version y value 1.
+- «La hoja no es compatible…»: en la pestaña meta debe haber una fila con key schema_version y value 2; con el Code.gs actual una hoja con 1 se actualiza sola.
 - «El script no está dentro de una hoja…»: crea el script desde Extensiones → Apps Script de la hoja.
 
 PARTE 2. INSTRUCCIONES PARA AGENTES DE PROGRAMACIÓN: ACTUALIZAR LA HOJA DESPUÉS DE CADA COMMIT
@@ -51,10 +51,16 @@ Después de cada commit en <REPO>, rama <RAMA>:
    - graph_label (opcional): frase corta de lo que hace el archivo en este cambio
    - graph_order (opcional): número entero con el orden de lectura
    - graph_to (opcional): file_path de destino del mismo commit, separados por |
-5. No escribas en reviews ni en meta, y no cambies status de commits ya revisados: la app los actualiza.
-6. Verifica con la aplicación web, siguiendo redirecciones (usa -d sin -X POST para que curl siga la redirección de Google con GET):
-   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"ping","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe responder {"ok":true,...,"schema_version":"1","commits":N,...}
-   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"diffs","sha":"<SHA>","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe traer las filas del commit.
+5. Agrega la estructura del commit para la vista Estructura:
+   - Una vez por máquina, descarga ${base}tools/structure.mjs y ${base}tools/structure.py a una carpeta fuera del repo (por ejemplo /tmp/diff-review-tools) e instala ahí TypeScript 5, que trae el compilador en JavaScript: npm install --prefix /tmp/diff-review-tools typescript@5
+   - En la raíz del repo: NODE_PATH=/tmp/diff-review-tools/node_modules node /tmp/diff-review-tools/structure.mjs HEAD
+   - Imprime un JSON {"columns":[...],"rows":[...]}. Agrega cada objeto de rows como una fila de la pestaña structure, cada valor en la columna con ese nombre y en RAW.
+   - Si structure ya tiene filas con ese commit_sha, no las repitas. Si rows viene vacío, no escribas nada.
+   - Analiza .js, .mjs, .cjs, .jsx, .ts, .tsx, .mts, .cts y .py (con python3). Lo que imprime en stderr son avisos y no detiene los demás pasos.
+6. No escribas en reviews ni en meta, y no cambies status de commits ya revisados: la app los actualiza.
+7. Verifica con la aplicación web, siguiendo redirecciones (usa -d sin -X POST para que curl siga la redirección de Google con GET):
+   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"ping","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe responder {"ok":true,...,"schema_version":"2","commits":N,...}
+   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"diffs","sha":"<SHA>","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe traer las filas del commit en diffs y en structure.
    Si responde ok:false, el campo error dice qué falta: forbidden (clave), tabs o headers (Inicializar), schema (meta).
-7. Para leer lo que revisé: curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"load","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" devuelve commits y reviews; en reviews, decision es approved, rejected o comment, y comment trae el texto.
-8. Nunca escribas <URL_DEL_WEB_APP>, <SECRETO> ni <ID_DE_LA_HOJA> en el repositorio, en commits, en PR ni en logs. Léelos de variables de entorno o secretos.`;
+8. Para leer lo que revisé: curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"load","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" devuelve commits y reviews; en reviews, decision es approved, rejected o comment, y comment trae el texto.
+9. Nunca escribas <URL_DEL_WEB_APP>, <SECRETO> ni <ID_DE_LA_HOJA> en el repositorio, en commits, en PR ni en logs. Léelos de variables de entorno o secretos.`;

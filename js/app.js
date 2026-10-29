@@ -8,15 +8,19 @@ import {
   cleanLegacy, clearConnection, connectionError, createScriptBackend, loadConnection, saveConnection,
 } from "./script.js";
 import { createDemoBackend } from "./demo.js";
-import { AI_PROMPT } from "./prompt.js";
+import { aiPrompt } from "./prompt.js";
 import { parsePatch, renderLines } from "./diff.js";
 import { buildGraph, clearGraph, graphPanel } from "./graph.js";
+import { SIDE, structurePanel } from "./structure.js";
 import {
   branchSummary, commitStats, commitStatus, filesFor, firstLine, newId,
   restLines, reviewsFor, SHORT_SHA_LENGTH, shortSha, sortCommits, sortReviews, uniqueValues,
 } from "./model.js";
 
 const TOAST_MS = 2600;
+const FLASH_MS = 1600;
+const VIEW = Object.freeze({ GRAPH: "graph", STRUCTURE: "structure" });
+const fillers = new WeakMap();
 const LOCALE = "es-CO";
 const ROUTE_SEPARATOR = "/";
 const HASH_PREFIX = "#/";
@@ -51,7 +55,7 @@ const ERROR_TEXT = Object.freeze({
   [ERROR.BAD_REQUEST]: "La aplicación web no reconoce la petición. Actualiza Code.gs y publica una nueva versión.",
   [ERROR.TABS]: "A la hoja le faltan pestañas: ",
   [ERROR.HEADERS]: "Faltan columnas en la hoja: ",
-  [ERROR.SCHEMA]: "La hoja no es compatible. En meta se espera schema_version = 1 y se encontró: ",
+  [ERROR.SCHEMA]: "La hoja no es compatible. En meta se espera schema_version = 1 o 2 y se encontró: ",
   [ERROR.NOT_FOUND]: "No se encontró el commit en la hoja: ",
   [ERROR.DECISION]: "Decisión no válida: ",
   [ERROR.LOCK]: "La hoja está ocupada. Intenta otra vez.",
@@ -528,12 +532,33 @@ function fileNode(file, autoOpen) {
     else if (!parsed.lines.length) body.append(h("p", { class: "note", text: renamed ? "Solo se renombró, sin cambios de contenido." : "Sin cambios de texto." }));
     else body.append(h("div", { class: "diff-scroll" }, renderLines(parsed)));
   };
+  fillers.set(details, fill);
   details.addEventListener("toggle", () => { if (details.open) fill(); });
   if (autoOpen && !large && !parsed.binary) {
     details.open = true;
     fill();
   }
   return details;
+}
+
+function reduceMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function openFile(list, path, line, side) {
+  const details = [...list.querySelectorAll("details.file")].find((d) => d.dataset.path === path);
+  if (!details) return;
+  details.open = true;
+  fillers.get(details)?.();
+  const attr = side === SIDE.OLD ? "old" : "new";
+  const target = line ? [...details.querySelectorAll(".ln")].find((row) => row.dataset[attr] === String(line)) : null;
+  const behavior = reduceMotion() ? "auto" : "smooth";
+  (target || details).scrollIntoView({ behavior, block: target ? "center" : "start" });
+  const flash = target || details;
+  flash.classList.remove("flash");
+  void flash.offsetWidth;
+  flash.classList.add("flash");
+  setTimeout(() => flash.classList.remove("flash"), FLASH_MS);
 }
 
 function filesSection(commit) {
@@ -551,12 +576,16 @@ function filesSection(commit) {
   const graphBtn = h("button", {
     class: "pill", type: "button", id: "graph-toggle", text: "Graph", "aria-pressed": "false", disabled: true,
   });
+  const structBtn = h("button", {
+    class: "pill", type: "button", id: "structure-toggle", text: "Estructura", "aria-pressed": "false", disabled: true,
+  });
   const toggleAll = (open) => list.querySelectorAll("details.file").forEach((d) => { d.open = open; });
   section.append(
     h("div", { class: "files-head" },
       h("h2", { class: "section-title", id: "files-title", text: "Archivos" }),
       h("div", { class: "pills" },
         graphBtn,
+        structBtn,
         wrapBtn,
         h("button", { class: "pill", type: "button", onclick: () => toggleAll(true), text: "Abrir" }),
         h("button", { class: "pill", type: "button", onclick: () => toggleAll(false), text: "Cerrar" }))),
@@ -571,18 +600,28 @@ function filesSection(commit) {
         ? files.map((file) => fileNode(file, autoOpen))
         : [h("p", { class: "note", text: "Este commit no tiene diffs en la hoja." })]));
       const graph = buildGraph(commit, table.rows);
+      const onOpen = (path, line, side) => openFile(list, path, line, side);
+      const views = {
+        [VIEW.GRAPH]: { button: graphBtn, make: () => graphPanel(graph, { onOpen }) },
+        [VIEW.STRUCTURE]: { button: structBtn, make: () => structurePanel(table.structure, { onOpen }) },
+      };
       let panel = null;
-      graphBtn.disabled = false;
-      graphBtn.addEventListener("click", () => {
-        const open = graphBtn.getAttribute("aria-pressed") !== "true";
-        graphBtn.setAttribute("aria-pressed", String(open));
+      let current = "";
+      const show = (name) => {
+        const next = current === name ? "" : name;
         panel?.remove();
         clearGraph();
         panel = null;
-        if (!open) return;
-        panel = graphPanel(graph);
+        current = next;
+        for (const [key, view] of Object.entries(views)) view.button.setAttribute("aria-pressed", String(key === next));
+        if (!next) return;
+        panel = views[next].make();
         list.before(panel);
-      });
+      };
+      for (const [name, view] of Object.entries(views)) {
+        view.button.disabled = false;
+        view.button.addEventListener("click", () => show(name));
+      }
     })
     .catch((err) => {
       handleError(err);
@@ -707,14 +746,18 @@ function copyFallback(text) {
   return ok;
 }
 
+function promptText() {
+  return aiPrompt(new URL(".", location.href.split("#")[0]).href);
+}
+
 async function copyPrompt(e) {
   const button = e.currentTarget;
   let ok = false;
   try {
-    await navigator.clipboard.writeText(AI_PROMPT);
+    await navigator.clipboard.writeText(promptText());
     ok = true;
   } catch (err) {
-    ok = copyFallback(AI_PROMPT);
+    ok = copyFallback(promptText());
   }
   if (!ok) {
     toast("No se pudo copiar el prompt.");
@@ -756,6 +799,7 @@ function fillSetup() {
     h("h3", { text: "Pestañas y columnas" }),
     h("p", { class: "hint" }, Object.entries(HEADERS).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))),
     h("p", { class: "hint", text: "Opcionales, para Graph. Si no están, el commit se ve como siempre. Una hoja nueva las recibe; una hoja ya armada no se modifica. commits: graph_rule. diffs: graph_label, graph_order, graph_to. graph_rule es el título, graph_label la frase del archivo, graph_order el orden y graph_to los file_path de destino separados por |." }),
+    h("p", { class: "hint", text: "structure es para Estructura y la llena el agente con tools/structure.mjs después de cada commit. Si tu hoja tiene schema_version 1, el Code.gs actual le agrega la pestaña y sube la versión a 2 sin tocar los datos." }),
     h("p", { class: "hint", text: "Carga commits y diffs en modo RAW. patch va en fragmentos de hasta 40.000 caracteres y chunk_index empieza en 0. La app escribe en reviews y en commits.status." }));
   loadCode()
     .then((text) => {
