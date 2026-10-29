@@ -97,14 +97,7 @@ var ERROR_ = Object.freeze({
 });
 
 function doGet(e) {
-  var params = (e && e.parameter) || {};
-  if (!authorized_(params.key)) return json_({ ok: false, error: ERROR_.FORBIDDEN });
-  return run_(function () {
-    if (params.action === ACTION_.PING) return ping_();
-    if (params.action === ACTION_.LOAD) return load_();
-    if (params.action === ACTION_.DIFFS) return diffs_(params.sha);
-    throw fail_(ERROR_.BAD_REQUEST);
-  });
+  return json_({ ok: false, error: ERROR_.BAD_REQUEST });
 }
 
 function doPost(e) {
@@ -112,6 +105,9 @@ function doPost(e) {
   if (!body) return json_({ ok: false, error: ERROR_.BAD_REQUEST });
   if (!authorized_(body.key)) return json_({ ok: false, error: ERROR_.FORBIDDEN });
   return run_(function () {
+    if (body.action === ACTION_.PING) return ping_();
+    if (body.action === ACTION_.LOAD) return load_();
+    if (body.action === ACTION_.DIFFS) return diffs_(body.sha);
     if (body.action === ACTION_.REVIEW) return review_(body.review);
     throw fail_(ERROR_.BAD_REQUEST);
   });
