@@ -17,6 +17,8 @@
 ## Conectar tu hoja
 La app lee y escribe en una hoja de Google a través de un Apps Script que publicas tú. La URL y la clave se guardan solo en tu navegador, nunca en el repositorio. Dentro de la app, **Cómo preparar la hoja** trae estos pasos y el script listo para copiar.
 
+**Prompt IA**, junto a ese botón, copia un prompt para pegar en tu asistente de IA: te guía paso a paso en la conexión y le explica a un agente de programación cómo cargar cada commit y sus diffs en la hoja, sin escribir la URL ni la clave en el repositorio.
+
 1. Crea una hoja vacía en [sheets.new](https://sheets.new).
 2. En la hoja: **Extensiones → Apps Script**, borra el ejemplo y pega el contenido de [`apps-script/Code.gs`](apps-script/Code.gs).
 3. En **Configuración del proyecto → Propiedades del script**, crea `SECRET` con una clave larga.
@@ -27,7 +29,7 @@ La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `diffs`, `r
 
 Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
-Si cargas datos en la hoja por tu cuenta, escribe los valores en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`.
+Si cargas los datos por tu cuenta o con un agente, escribe los valores en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`.
 
 ## Stack
 JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler.
@@ -37,6 +39,8 @@ python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
 Versión actual: `diff-review v0.2.8`.
+
+Licencia: [MIT](LICENSE).
 
 ---
 
