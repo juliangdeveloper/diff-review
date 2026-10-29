@@ -29,7 +29,14 @@ La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `diffs`, `r
 
 Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
-Si cargas los datos por tu cuenta o con un agente, escribe los valores en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`.
+### Cómo llegan los commits
+La app y el Apps Script no suben commits: solo leen y guardan revisiones. Los commits y sus diffs se escriben directo en la hoja, con la API de Google Sheets o a mano, en modo `RAW` para que Sheets no convierta SHAs ni líneas que empiezan con `+`, `-` o `=`. La parte 2 de **Prompt IA** le dice a un agente de programación qué columnas llenar después de cada commit y cómo verificarlo con `action=ping` y `action=diffs`.
+
+### Seguridad
+- El Apps Script se publica con acceso para **cualquier usuario**. Cada petición debe traer la clave, que se compara con `SECRET` en las propiedades del script; sin ella, o sin `SECRET`, responde `forbidden`.
+- Mantén en privado la URL `/exec` y la clave: la app las guarda en el `localStorage` del navegador y la clave viaja en la URL de las lecturas.
+- Con las dos, alguien podría leer todos los commits, diffs y revisiones de la hoja, y agregar revisiones o cambiar el estado de un commit. No puede subir commits ni tocar tu repositorio.
+- Si se filtran, cambia `SECRET` en las propiedades del script y actualiza la clave en **Ajustes**.
 
 ## Stack
 JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler.
