@@ -4,6 +4,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const ARROW_ID = "commit-graph-arrow";
 const TARGET_SPLIT = /[|\r\n]+/;
 const STEP_MS = 2000;
+const TAP_MAX_MS = 450;
+const TAP_SLOP_PX = 10;
+const OPEN_KEYS = Object.freeze(["Enter", " "]);
 
 let unmount = () => {};
 
@@ -97,8 +100,11 @@ function nodeCard(node) {
   const card = document.createElement("div");
   card.className = "graph-node";
   card.dataset.path = node.path;
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
   const phrase = node.label;
   card.title = phrase ? `${phrase} — ${node.path}` : node.path;
+  card.setAttribute("aria-label", `Abrir ${node.path}`);
   if (phrase) {
     const phraseEl = document.createElement("span");
     phraseEl.className = "graph-phrase";
@@ -427,7 +433,7 @@ function drawEdges(flow, edges) {
   }
 }
 
-export function graphPanel(graph) {
+export function graphPanel(graph, { onOpen } = {}) {
   clearGraph();
   if (!graph) {
     const note = document.createElement("p");
@@ -473,6 +479,7 @@ export function graphPanel(graph) {
   let mark = 0;
   let paintGen = 0;
   const held = new Set();
+  const presses = new Map();
 
   const draw = () => {
     if (!flow.isConnected) return;
@@ -548,17 +555,37 @@ export function graphPanel(graph) {
     if (!section.isConnected) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     held.add(event.pointerId);
+    const node = event.target.closest?.(".graph-node");
+    if (node) presses.set(event.pointerId, { path: node.dataset.path, x: event.clientX, y: event.clientY, at: performance.now() });
     pause();
+  };
+
+  const tapped = (event) => {
+    const press = presses.get(event.pointerId);
+    presses.delete(event.pointerId);
+    if (!press || event.type !== "pointerup" || !onOpen) return null;
+    const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+    if (moved > TAP_SLOP_PX || performance.now() - press.at > TAP_MAX_MS) return null;
+    return press.path;
   };
 
   const onUp = (event) => {
     if (!held.has(event.pointerId)) return;
     held.delete(event.pointerId);
+    const path = tapped(event);
     if (!section.isConnected) {
       clearGraph();
       return;
     }
     if (!held.size) resume();
+    if (path) onOpen(path);
+  };
+
+  const onKey = (event) => {
+    const node = event.target.closest?.(".graph-node");
+    if (!node || !onOpen || !OPEN_KEYS.includes(event.key)) return;
+    event.preventDefault();
+    onOpen(node.dataset.path);
   };
 
   const removal = new MutationObserver(() => {
@@ -567,6 +594,7 @@ export function graphPanel(graph) {
 
   section.addEventListener("pointerdown", onDown);
   section.addEventListener("contextmenu", (event) => event.preventDefault());
+  section.addEventListener("keydown", onKey);
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onUp);
   const observer = new ResizeObserver(draw);
@@ -578,6 +606,7 @@ export function graphPanel(graph) {
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
     held.clear();
+    presses.clear();
   };
   paint();
   requestAnimationFrame(() => {

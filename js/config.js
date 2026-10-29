@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.2.9";
+export const APP_VERSION = "0.3.0";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
@@ -11,7 +11,8 @@ export const PORTFOLIO = Object.freeze({
     objetivo: "Open source para revisar diffs de commits en el celular y aprobar, rechazar o comentar.",
   }),
 });
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+export const SUPPORTED_SCHEMAS = Object.freeze(["1", String(SCHEMA_VERSION)]);
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
 export const LARGE_FILE_LINES = 800;
@@ -37,6 +38,8 @@ export const LEGACY_STORAGE = Object.freeze([
 export const URLS = Object.freeze({
   NEW_SHEET: "https://sheets.new",
   CODE_GS: "apps-script/Code.gs",
+  STRUCTURE_JS: "tools/structure.mjs",
+  STRUCTURE_PY: "tools/structure.py",
 });
 
 export const ACTION = Object.freeze({
@@ -69,6 +72,7 @@ export const DEMO_ON = "1";
 export const TAB = Object.freeze({
   COMMITS: "commits",
   DIFFS: "diffs",
+  STRUCTURE: "structure",
   REVIEWS: "reviews",
   META: "meta",
 });
@@ -121,9 +125,36 @@ export const GRAPH = Object.freeze({
   TO: "graph_to",
 });
 
+export const NODE = Object.freeze({
+  SHA: "commit_sha",
+  PATH: "file_path",
+  ID: "node_id",
+  PARENT: "parent_id",
+  KIND: "kind",
+  NAME: "name",
+  STATUS: "status",
+  LINE: "line",
+  DETAIL: "detail",
+});
+
+export const NODE_STATUS = Object.freeze({
+  ADDED: "added",
+  REMOVED: "removed",
+  MODIFIED: "modified",
+  UNCHANGED: "unchanged",
+});
+
+export const NODE_KIND = Object.freeze({
+  MODULE: "module",
+  CLASS: "class",
+  FUNCTION: "function",
+  METHOD: "method",
+});
+
 export const HEADERS = Object.freeze({
   [TAB.COMMITS]: Object.freeze(Object.values(COMMIT)),
   [TAB.DIFFS]: Object.freeze(Object.values(DIFF)),
+  [TAB.STRUCTURE]: Object.freeze(Object.values(NODE)),
   [TAB.REVIEWS]: Object.freeze(Object.values(REVIEW)),
   [TAB.META]: Object.freeze(Object.values(META)),
 });
@@ -173,6 +204,28 @@ export const LABEL = Object.freeze({
     [CHANGE.MODIFIED]: "Modificado",
     [CHANGE.DELETED]: "Eliminado",
     [CHANGE.RENAMED]: "Renombrado",
+  }),
+  node: Object.freeze({
+    [NODE_STATUS.ADDED]: "Añadido",
+    [NODE_STATUS.REMOVED]: "Quitado",
+    [NODE_STATUS.MODIFIED]: "Modificado",
+    [NODE_STATUS.UNCHANGED]: "Sin cambios",
+  }),
+  kind: Object.freeze({
+    module: "módulo",
+    class: "clase",
+    function: "función",
+    method: "método",
+    if: "if",
+    switch: "switch",
+    for: "bucle",
+    while: "bucle",
+    try: "try",
+    catch: "catch",
+    with: "with",
+    return: "return",
+    throw: "throw",
+    call: "llamada",
   }),
 });
 

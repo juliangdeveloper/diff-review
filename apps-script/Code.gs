@@ -1,4 +1,5 @@
-var SCHEMA_VERSION_ = "1";
+var SCHEMA_VERSION_ = "2";
+var MIGRATABLE_SCHEMAS_ = Object.freeze(["1"]);
 var SCHEMA_KEY_ = "schema_version";
 var SECRET_PROPERTY_ = "SECRET";
 var SPREADSHEET_NAME_ = "diff-review";
@@ -14,11 +15,12 @@ var REVIEW_ID_RE_ = /^[A-Za-z0-9_-]{8,64}$/;
 var TAB_ = Object.freeze({
   COMMITS: "commits",
   DIFFS: "diffs",
+  STRUCTURE: "structure",
   REVIEWS: "reviews",
   META: "meta",
 });
 
-var TAB_ORDER_ = Object.freeze([TAB_.COMMITS, TAB_.DIFFS, TAB_.REVIEWS, TAB_.META]);
+var TAB_ORDER_ = Object.freeze([TAB_.COMMITS, TAB_.DIFFS, TAB_.STRUCTURE, TAB_.REVIEWS, TAB_.META]);
 
 var COMMIT_ = Object.freeze({
   SHA: "commit_sha",
@@ -48,6 +50,7 @@ var META_ = Object.freeze({
 var HEADERS_ = Object.freeze({
   commits: ["commit_sha", "short_sha", "branch", "repo", "author", "date_iso", "message", "parent_sha", "files_changed", "additions", "deletions", "uploaded_at", "status"],
   diffs: ["commit_sha", "file_path", "change_type", "old_path", "chunk_index", "chunk_total", "patch"],
+  structure: ["commit_sha", "file_path", "node_id", "parent_id", "kind", "name", "status", "line", "detail"],
   reviews: ["review_id", "commit_sha", "branch", "decision", "comment", "reviewer", "reviewed_at"],
   meta: ["key", "value"],
 });
@@ -55,6 +58,7 @@ var HEADERS_ = Object.freeze({
 var OPTIONAL_HEADERS_ = Object.freeze({
   commits: ["graph_rule"],
   diffs: ["graph_label", "graph_order", "graph_to"],
+  structure: [],
   reviews: [],
   meta: [],
 });
@@ -232,13 +236,24 @@ function schemaRow_(sheet) {
   return 0;
 }
 
+function schemaValue_(sheet, row) {
+  var head = header_(sheet, TAB_.META);
+  return text_(sheet.getRange(row, head.map[META_.VALUE]).getValue()).trim();
+}
+
+function migratable_(sheet) {
+  var row = schemaRow_(sheet);
+  return row > 0 && MIGRATABLE_SCHEMAS_.indexOf(schemaValue_(sheet, row)) >= 0;
+}
+
 function needsRepair_(ss) {
   if (ss.getName() !== SPREADSHEET_NAME_) return true;
   for (var i = 0; i < TAB_ORDER_.length; i += 1) {
     var sheet = ss.getSheetByName(TAB_ORDER_[i]);
     if (!sheet || missingHeaders_(sheet, TAB_ORDER_[i]).missing.length) return true;
   }
-  if (!schemaRow_(ss.getSheetByName(TAB_.META))) return true;
+  var metaSheet = ss.getSheetByName(TAB_.META);
+  if (!schemaRow_(metaSheet) || migratable_(metaSheet)) return true;
   return emptyDefaultTabs_(ss).length > 0;
 }
 
@@ -260,6 +275,10 @@ function repair_(ss) {
     if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
   }
   var meta = ss.getSheetByName(TAB_.META);
+  if (migratable_(meta)) {
+    var current = header_(meta, TAB_.META);
+    writeText_(meta.getRange(schemaRow_(meta), current.map[META_.VALUE]), [[SCHEMA_VERSION_]]);
+  }
   if (!schemaRow_(meta)) {
     var head = header_(meta, TAB_.META);
     var line = [];
@@ -335,7 +354,7 @@ function textRows_(values) {
 
 function checkTabs_(ss) {
   var missing = [];
-  var tabs = [TAB_.COMMITS, TAB_.DIFFS, TAB_.REVIEWS, TAB_.META];
+  var tabs = TAB_ORDER_;
   for (var i = 0; i < tabs.length; i += 1) {
     if (!ss.getSheetByName(tabs[i])) missing.push(tabs[i]);
   }
@@ -401,11 +420,20 @@ function diffs_(sha) {
   if (!target) throw fail_(ERROR_.BAD_REQUEST);
   var ss = spreadsheet_();
   ensureStructure_(ss);
-  var sheet = sheet_(ss, TAB_.DIFFS);
-  var head = header_(sheet, TAB_.DIFFS);
+  return {
+    ok: true,
+    sha: target,
+    diffs: rowsFor_(ss, TAB_.DIFFS, target),
+    structure: rowsFor_(ss, TAB_.STRUCTURE, target),
+  };
+}
+
+function rowsFor_(ss, tab, target) {
+  var sheet = sheet_(ss, tab);
+  var head = header_(sheet, tab);
   var out = [head.names];
   var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { ok: true, sha: target, diffs: out };
+  if (lastRow < 2) return out;
   var shas = sheet.getRange(2, head.map[DIFF_.SHA], lastRow - 1, 1).getValues();
   var runs = [];
   for (var i = 0; i < shas.length; i += 1) {
@@ -419,7 +447,7 @@ function diffs_(sha) {
     var block = sheet.getRange(runs[j].start, 1, runs[j].count, head.width).getValues();
     out = out.concat(textRows_(block));
   }
-  return { ok: true, sha: target, diffs: out };
+  return out;
 }
 
 function writeText_(range, rows) {
