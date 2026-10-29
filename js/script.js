@@ -87,23 +87,16 @@ async function request(url, options) {
 }
 
 export function createScriptBackend(connection) {
-  const get = (action, params = {}) => {
-    const endpoint = new URL(connection.url);
-    endpoint.searchParams.set("action", action);
-    for (const [name, value] of Object.entries(params)) endpoint.searchParams.set(name, value);
-    endpoint.searchParams.set("key", connection.key);
-    return request(endpoint.toString(), { method: "GET" });
-  };
-  const post = (action, payload) => request(connection.url, {
+  const post = (action, payload = {}) => request(connection.url, {
     method: "POST",
     headers: { "Content-Type": TEXT_TYPE },
     body: JSON.stringify({ key: connection.key, action, ...payload }),
   });
   return {
     demo: false,
-    ping: () => get(ACTION.PING),
-    load: () => get(ACTION.LOAD),
-    diffs: (sha) => get(ACTION.DIFFS, { sha }),
+    ping: () => post(ACTION.PING),
+    load: () => post(ACTION.LOAD),
+    diffs: (sha) => post(ACTION.DIFFS, { sha }),
     review: (review) => post(ACTION.REVIEW, { review }),
   };
 }

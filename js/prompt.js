@@ -23,7 +23,7 @@ Mensajes de error y qué hacer:
 
 PARTE 2. INSTRUCCIONES PARA AGENTES DE PROGRAMACIÓN: ACTUALIZAR LA HOJA DESPUÉS DE CADA COMMIT
 
-La aplicación web solo lee y guarda revisiones: GET action=ping, action=load y action=diffs, y POST action=review. No tiene una acción para subir commits. Los commits y sus diffs se escriben directo en la hoja <ID_DE_LA_HOJA> con la API de Google Sheets (o la herramienta de hojas que tengas), con valueInputOption=RAW para que Sheets no convierta SHAs, fechas ni líneas que empiezan con +, - o =.
+La aplicación web solo lee y guarda revisiones, siempre por POST con un cuerpo JSON que lleva la clave: action ping, load, diffs y review. La clave nunca va en la URL. No tiene una acción para subir commits. Los commits y sus diffs se escriben directo en la hoja <ID_DE_LA_HOJA> con la API de Google Sheets (o la herramienta de hojas que tengas), con valueInputOption=RAW para que Sheets no convierta SHAs, fechas ni líneas que empiezan con +, - o =.
 
 Después de cada commit en <REPO>, rama <RAMA>:
 1. Lee la fila 1 de las pestañas commits y diffs y escribe cada valor en la columna con ese nombre; no asumas el orden. Todos los valores van como texto.
@@ -52,9 +52,9 @@ Después de cada commit en <REPO>, rama <RAMA>:
    - graph_order (opcional): número entero con el orden de lectura
    - graph_to (opcional): file_path de destino del mismo commit, separados por |
 5. No escribas en reviews ni en meta, y no cambies status de commits ya revisados: la app los actualiza.
-6. Verifica con la aplicación web, siguiendo redirecciones:
-   curl -sL "<URL_DEL_WEB_APP>?action=ping&key=<SECRETO>" debe responder {"ok":true,...,"schema_version":"1","commits":N,...}
-   curl -sL "<URL_DEL_WEB_APP>?action=diffs&sha=<SHA>&key=<SECRETO>" debe traer las filas del commit.
+6. Verifica con la aplicación web, siguiendo redirecciones (usa -d sin -X POST para que curl siga la redirección de Google con GET):
+   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"ping","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe responder {"ok":true,...,"schema_version":"1","commits":N,...}
+   curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"diffs","sha":"<SHA>","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" debe traer las filas del commit.
    Si responde ok:false, el campo error dice qué falta: forbidden (clave), tabs o headers (Inicializar), schema (meta).
-7. Para leer lo que revisé: curl -sL "<URL_DEL_WEB_APP>?action=load&key=<SECRETO>" devuelve commits y reviews; en reviews, decision es approved, rejected o comment, y comment trae el texto.
+7. Para leer lo que revisé: curl -sL -H "Content-Type: text/plain;charset=UTF-8" -d '{"action":"load","key":"<SECRETO>"}' "<URL_DEL_WEB_APP>" devuelve commits y reviews; en reviews, decision es approved, rejected o comment, y comment trae el texto.
 8. Nunca escribas <URL_DEL_WEB_APP>, <SECRETO> ni <ID_DE_LA_HOJA> en el repositorio, en commits, en PR ni en logs. Léelos de variables de entorno o secretos.`;

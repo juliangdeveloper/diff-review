@@ -47,7 +47,7 @@ const COMMITS = [
 ];
 
 const CART_PATCH = [
-  "@@ -1,12 +1,24 @@",
+  "@@ -1,10 +1,17 @@",
   " import { formatMoney } from \"./money.js\";",
   "+import { couponRate } from \"./coupons.js\";",
   " ",
@@ -84,7 +84,7 @@ const COUPON_PATCH = [
 ].join("\n");
 
 const TEST_PATCH = [
-  "@@ -4,6 +4,12 @@ import { cartTotal } from \"../src/cart.js\";",
+  "@@ -4,4 +4,8 @@ import { cartTotal } from \"../src/cart.js\";",
   " test(\"suma los productos\", () => {",
   "   assert.equal(cartTotal([{ price: 100, qty: 1 }]), 119);",
   " });",
