@@ -41,3 +41,5 @@ Versión actual: `diff-review v0.2.7`.
 ---
 
 Más proyectos: https://juliangdeveloper.github.io/
+
+Hecho con ❤️ y 🔍
