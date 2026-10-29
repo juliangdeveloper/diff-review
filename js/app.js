@@ -8,6 +8,7 @@ import {
   cleanLegacy, clearConnection, connectionError, createScriptBackend, loadConnection, saveConnection,
 } from "./script.js";
 import { createDemoBackend } from "./demo.js";
+import { AI_PROMPT } from "./prompt.js";
 import { parsePatch, renderLines } from "./diff.js";
 import { buildGraph, clearGraph, graphPanel } from "./graph.js";
 import {
@@ -688,6 +689,52 @@ async function copyCode() {
   }
 }
 
+const PROMPT_LABEL = "Prompt IA";
+const PROMPT_DONE = "Copiado";
+
+function copyFallback(text) {
+  const area = h("textarea", { class: "offscreen", readonly: true, "aria-hidden": "true" });
+  area.value = text;
+  document.body.append(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (e) {
+    ok = false;
+  }
+  area.remove();
+  return ok;
+}
+
+async function copyPrompt(e) {
+  const button = e.currentTarget;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(AI_PROMPT);
+    ok = true;
+  } catch (err) {
+    ok = copyFallback(AI_PROMPT);
+  }
+  if (!ok) {
+    toast("No se pudo copiar el prompt.");
+    return;
+  }
+  button.textContent = PROMPT_DONE;
+  button.classList.add("done");
+  toast("Prompt copiado. Pégalo en tu asistente de IA.");
+  setTimeout(() => {
+    button.textContent = PROMPT_LABEL;
+    button.classList.remove("done");
+  }, TOAST_MS);
+}
+
+function setupRow(id) {
+  return h("div", { class: "btn-row" },
+    h("button", { class: "btn", type: "button", id, onclick: openSetup, text: "Cómo preparar la hoja" }),
+    h("button", { class: "btn", type: "button", id: "prompt-copy", onclick: copyPrompt, text: PROMPT_LABEL }));
+}
+
 function fillSetup() {
   const body = document.getElementById("setup-body");
   if (body.dataset.ready) return;
@@ -785,7 +832,7 @@ function connectionSection() {
     return h("div", { class: "card form" },
       h("p", { class: "muted", text: "Estás en la demo: usa datos de ejemplo y las revisiones quedan solo en esta pestaña." }),
       h("a", { class: "btn primary", href: location.pathname, text: "Salir de la demo" }),
-      h("button", { class: "btn", type: "button", onclick: openSetup, text: "Cómo preparar la hoja" }));
+      setupRow("setup-open"));
   }
   const saved = loadConnection(safeStorage("localStorage"));
   const url = h("input", {
@@ -800,7 +847,7 @@ function connectionSection() {
     h("label", { class: "field" }, h("span", { class: "select-label", text: "Clave (SECRET)" }), key),
     test,
     connectionStatus(),
-    h("button", { class: "btn", type: "button", id: "setup-open", onclick: openSetup, text: "Cómo preparar la hoja" }),
+    setupRow("setup-open"),
     saved ? h("button", { class: "btn", type: "button", id: "conn-forget", onclick: forgetConnection, text: "Olvidar conexión" }) : null,
     h("p", { class: "hint", text: "La URL y la clave se guardan solo en este navegador." }));
 }
