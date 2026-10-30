@@ -1,4 +1,4 @@
-import { DIFF, ERROR, HEADERS, OPTIONAL, SUPPORTED_SCHEMAS, TAB } from "./config.js";
+import { ERROR, HEADERS, OPTIONAL, RAW_FIELDS, SUPPORTED_SCHEMAS, TAB } from "./config.js";
 import { AppError } from "./errors.js";
 
 const HEADER_ROW = 1;
@@ -27,7 +27,7 @@ export function parseTable(values, tab) {
     for (const name of fields) {
       if (!(name in index)) continue;
       const raw = String(line[index[name]] ?? "");
-      row[name] = name === DIFF.PATCH ? raw : raw.trim();
+      row[name] = RAW_FIELDS.includes(name) ? raw : raw.trim();
     }
     rows.push(row);
   }
@@ -51,6 +51,7 @@ export function parseLoad(body) {
 
 export function parseDiffs(body) {
   const table = parseTable(body?.diffs, TAB.DIFFS);
+  table.files = Array.isArray(body?.files) ? parseTable(body.files, TAB.FILES).rows : null;
   table.structure = Array.isArray(body?.structure) ? parseTable(body.structure, TAB.STRUCTURE).rows : null;
   return table;
 }

@@ -1,5 +1,5 @@
-var SCHEMA_VERSION_ = "2";
-var MIGRATABLE_SCHEMAS_ = Object.freeze(["1"]);
+var SCHEMA_VERSION_ = "3";
+var MIGRATABLE_SCHEMAS_ = Object.freeze(["1", "2"]);
 var SCHEMA_KEY_ = "schema_version";
 var SECRET_PROPERTY_ = "SECRET";
 var SPREADSHEET_NAME_ = "diff-review";
@@ -14,13 +14,14 @@ var REVIEW_ID_RE_ = /^[A-Za-z0-9_-]{8,64}$/;
 
 var TAB_ = Object.freeze({
   COMMITS: "commits",
+  FILES: "files",
   DIFFS: "diffs",
   STRUCTURE: "structure",
   REVIEWS: "reviews",
   META: "meta",
 });
 
-var TAB_ORDER_ = Object.freeze([TAB_.COMMITS, TAB_.DIFFS, TAB_.STRUCTURE, TAB_.REVIEWS, TAB_.META]);
+var TAB_ORDER_ = Object.freeze([TAB_.COMMITS, TAB_.FILES, TAB_.DIFFS, TAB_.REVIEWS, TAB_.META]);
 
 var COMMIT_ = Object.freeze({
   SHA: "commit_sha",
@@ -49,6 +50,7 @@ var META_ = Object.freeze({
 
 var HEADERS_ = Object.freeze({
   commits: ["commit_sha", "short_sha", "branch", "repo", "author", "date_iso", "message", "parent_sha", "files_changed", "additions", "deletions", "uploaded_at", "status"],
+  files: ["commit_sha", "file_path", "change_type", "old_path", "side", "chunk_index", "chunk_total", "content"],
   diffs: ["commit_sha", "file_path", "change_type", "old_path", "chunk_index", "chunk_total", "patch"],
   structure: ["commit_sha", "file_path", "node_id", "parent_id", "kind", "name", "status", "line", "detail"],
   reviews: ["review_id", "commit_sha", "branch", "decision", "comment", "reviewer", "reviewed_at"],
@@ -57,6 +59,7 @@ var HEADERS_ = Object.freeze({
 
 var OPTIONAL_HEADERS_ = Object.freeze({
   commits: ["graph_rule"],
+  files: ["graph_label", "graph_order", "graph_to"],
   diffs: ["graph_label", "graph_order", "graph_to"],
   structure: [],
   reviews: [],
@@ -391,6 +394,7 @@ function ping_() {
   var version = schema_(ss);
   var commits = table_(ss, TAB_.COMMITS);
   var reviews = table_(ss, TAB_.REVIEWS);
+  header_(sheet_(ss, TAB_.FILES), TAB_.FILES);
   header_(sheet_(ss, TAB_.DIFFS), TAB_.DIFFS);
   return {
     ok: true,
@@ -423,9 +427,16 @@ function diffs_(sha) {
   return {
     ok: true,
     sha: target,
+    files: rowsFor_(ss, TAB_.FILES, target),
     diffs: rowsFor_(ss, TAB_.DIFFS, target),
-    structure: rowsFor_(ss, TAB_.STRUCTURE, target),
+    structure: legacyRowsFor_(ss, TAB_.STRUCTURE, target),
   };
+}
+
+function legacyRowsFor_(ss, tab, target) {
+  var sheet = ss.getSheetByName(tab);
+  if (!sheet || missingHeaders_(sheet, tab).missing.length) return null;
+  return rowsFor_(ss, tab, target);
 }
 
 function rowsFor_(ss, tab, target) {
