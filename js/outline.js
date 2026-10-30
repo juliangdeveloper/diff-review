@@ -1,4 +1,6 @@
-import { NODE, NODE_KIND, NODE_STATUS } from "./config.js";
+import { CHANGE, LABEL, NODE, NODE_KIND, NODE_STATUS } from "./config.js";
+import { LINE, parsePatch } from "./diff.js";
+import { diffTexts } from "./linediff.js";
 
 const KIND = Object.freeze({ ...NODE_KIND, BRANCH: "branch", CALL: "call" });
 const OWNER_KINDS = new Set(Object.values(NODE_KIND));
@@ -7,6 +9,7 @@ const LANG = Object.freeze({ JS: "js", PY: "py" });
 const EXTENSIONS = Object.freeze({
   ".js": ["js", "jsx"], ".mjs": ["js", "jsx"], ".cjs": ["js", "jsx"], ".jsx": ["js", "jsx"],
   ".ts": ["js", "ts"], ".mts": ["js", "ts"], ".cts": ["js", "ts"], ".tsx": ["js", "ts jsx"],
+  ".gs": ["js", "jsx"],
   ".py": ["py", ""],
 });
 const LOADERS = Object.freeze({
@@ -23,6 +26,16 @@ const SNIPPET_MAX = 80;
 const NAME_MAX = 160;
 const LABEL_NAMES = 2;
 const QUOTES = /^['"`]|['"`]$/g;
+const HUNK_HEAD = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/;
+export const SOURCE = Object.freeze({ FULL: "full", AGENT: "agent", PATCH: "patch", LIST: "list" });
+const LIST_TEXT = Object.freeze({
+  BINARY: "binario",
+  RENAMED: "solo renombrado",
+  SAME: "sin cambios de texto",
+  MISSING: "contenido incompleto",
+});
+const LIST_ID = "f1";
+const CHANGE_STATUS = Object.freeze({ [CHANGE.ADDED]: NODE_STATUS.ADDED, [CHANGE.DELETED]: NODE_STATUS.REMOVED });
 const VERBS = Object.freeze([
   [NODE_STATUS.ADDED, "Agrega"],
   [NODE_STATUS.MODIFIED, "Cambia"],
@@ -623,24 +636,6 @@ function levels(paths, edges) {
   return level;
 }
 
-export async function analyzeFiles(sha, files) {
-  const rows = [];
-  const info = [];
-  for (const file of files) {
-    if (file.binary || (!languageOf(file.path) && !languageOf(file.oldPath || file.path))) {
-      info.push({ path: file.path, changes: [], imports: [], calls: new Set(), defs: new Set() });
-      continue;
-    }
-    const before = await analyzeSource(file.old, file.oldPath || file.path);
-    const after = await analyzeSource(file.new, file.path);
-    const pairs = delta(before.nodes, after.nodes);
-    rows.push(...rowsFrom(sha, file.path, pairs));
-    const current = file.new == null ? before : after;
-    info.push({ path: file.path, changes: topChanges(pairs), imports: current.imports, calls: current.calls, defs: topDefs(current.nodes) });
-  }
-  return { rows, graph: autoGraph(info) };
-}
-
 export function autoGraph(info) {
   const paths = info.map((item) => item.path);
   const resolve = resolver(paths);
@@ -675,4 +670,166 @@ export function autoGraph(info) {
     .filter((node) => node.label || linked.has(node.path));
   if (!nodes.length) return null;
   return { nodes, edges };
+}
+
+const emptyInfo = (path, fallback = "") => ({ path, changes: [], imports: [], calls: new Set(), defs: new Set(), fallback });
+
+function supported(file) {
+  return Boolean(languageOf(file.path) || languageOf(file.oldPath || file.path));
+}
+
+function statusOf(file) {
+  return CHANGE_STATUS[file.change] || NODE_STATUS.MODIFIED;
+}
+
+function countText(parsed) {
+  const parts = [];
+  if (parsed.additions) parts.push(`+${parsed.additions}`);
+  if (parsed.deletions) parts.push(`\u2212${parsed.deletions}`);
+  return parts.join(" ");
+}
+
+function listName(file, parsed) {
+  if (!parsed) return LIST_TEXT.MISSING;
+  if (parsed.binary) return LIST_TEXT.BINARY;
+  const counts = countText(parsed);
+  if (counts) return counts;
+  return file.oldPath && file.oldPath !== file.path ? LIST_TEXT.RENAMED : LIST_TEXT.SAME;
+}
+
+function firstLine(file, parsed) {
+  const removed = statusOf(file) === NODE_STATUS.REMOVED;
+  const hit = parsed?.lines.find((line) => line.kind === (removed ? LINE.DEL : LINE.ADD))
+    || parsed?.lines.find((line) => line.kind === LINE.DEL || line.kind === LINE.ADD);
+  return hit ? (hit.newNo ?? hit.oldNo ?? 0) : 0;
+}
+
+function listResult(sha, file, parsed, partial) {
+  const name = listName(file, parsed);
+  return {
+    path: file.path,
+    source: SOURCE.LIST,
+    partial,
+    rows: [{
+      [NODE.SHA]: sha,
+      [NODE.PATH]: file.path,
+      [NODE.ID]: LIST_ID,
+      [NODE.PARENT]: "",
+      [NODE.KIND]: NODE_KIND.FILE,
+      [NODE.NAME]: name,
+      [NODE.STATUS]: statusOf(file),
+      [NODE.LINE]: String(firstLine(file, parsed) || ""),
+      [NODE.DETAIL]: "",
+    }],
+    info: emptyInfo(file.path, `${LABEL.change[file.change] || LABEL.change[CHANGE.MODIFIED]} · ${name}`),
+  };
+}
+
+function sparseSides(parsed, change) {
+  const oldText = [];
+  const newText = [];
+  const oldShown = [];
+  const newShown = [];
+  let pending = null;
+  const known = new Set();
+  const place = (lines, at, text) => {
+    if (at >= 0 && lines[at] == null) lines[at] = text;
+  };
+  for (const line of parsed.lines) {
+    if (line.kind === LINE.HUNK) {
+      const head = HUNK_HEAD.exec(line.text);
+      pending = head && head[3].trim() ? { old: Number(head[1]) - 2, new: Number(head[2]) - 2, text: head[3] } : null;
+      continue;
+    }
+    if (pending) {
+      if (!known.has(pending.text.trim()) && oldText[pending.old] == null && newText[pending.new] == null) {
+        place(oldText, pending.old, pending.text);
+        place(newText, pending.new, pending.text);
+      }
+      pending = null;
+    }
+    if (line.text != null) known.add(String(line.text).trim());
+    if (line.oldNo != null) {
+      oldText[line.oldNo - 1] = line.text;
+      oldShown.push(line.oldNo);
+    }
+    if (line.newNo != null) {
+      newText[line.newNo - 1] = line.text;
+      newShown.push(line.newNo);
+    }
+  }
+  const join = (lines) => Array.from(lines, (text) => text ?? "").join("\n");
+  return {
+    old: change === CHANGE.ADDED ? null : join(oldText),
+    new: change === CHANGE.DELETED ? null : join(newText),
+    oldShown: oldShown.sort((a, b) => a - b),
+    newShown: newShown.sort((a, b) => a - b),
+  };
+}
+
+function nearest(shown, line) {
+  if (!shown.length || !line) return line;
+  return shown.find((value) => value >= line) ?? shown[shown.length - 1];
+}
+
+function outlineResult(sha, file, before, after, source, partial) {
+  const pairs = delta(before.nodes, after.nodes);
+  const current = file.new == null ? before : after;
+  return {
+    path: file.path,
+    source,
+    partial,
+    rows: rowsFrom(sha, file.path, pairs),
+    info: { path: file.path, changes: topChanges(pairs), imports: current.imports, calls: current.calls, defs: topDefs(current.nodes), fallback: "" },
+  };
+}
+
+async function fromContent(sha, file) {
+  const parsed = diffTexts(file.old, file.new);
+  if (!supported(file)) return listResult(sha, file, parsed, false);
+  const before = await analyzeSource(file.old, file.oldPath || file.path);
+  const after = await analyzeSource(file.new, file.path);
+  return withList(outlineResult(sha, file, before, after, SOURCE.FULL, false), listResult(sha, file, parsed, false));
+}
+
+async function fromPatch(sha, file, patch) {
+  const parsed = parsePatch(patch);
+  const whole = file.change === CHANGE.ADDED || file.change === CHANGE.DELETED || !parsed.lines.length;
+  if (parsed.binary || !supported(file) || !parsed.lines.length) return listResult(sha, file, parsed, !whole);
+  const sides = sparseSides(parsed, file.change);
+  const before = await analyzeSource(sides.old, file.oldPath || file.path);
+  const after = await analyzeSource(sides.new, file.path);
+  const result = outlineResult(sha, { ...file, new: sides.new }, before, after, SOURCE.PATCH, !whole);
+  for (const row of result.rows) {
+    const shown = row[NODE.STATUS] === NODE_STATUS.REMOVED ? sides.oldShown : sides.newShown;
+    row[NODE.LINE] = String(nearest(shown, Number.parseInt(row[NODE.LINE], 10) || 0) || "");
+  }
+  return withList(result, listResult(sha, file, parsed, !whole));
+}
+
+function withList(result, list) {
+  if (result.rows.length) return result;
+  return { ...list, info: { ...result.info, fallback: list.info.fallback } };
+}
+
+async function analyzeOne(sha, file, patch) {
+  const complete = file.content && file.received >= file.total;
+  if (file.binary) return listResult(sha, file, { lines: [], binary: true, additions: 0, deletions: 0 }, false);
+  if (complete) return fromContent(sha, file);
+  const text = file.content ? patch : file.patch;
+  if (text) return fromPatch(sha, file, text);
+  return listResult(sha, file, file.content ? null : parsePatch(""), Boolean(file.content));
+}
+
+export async function analyzeCommit(sha, files, patches = []) {
+  const patchOf = new Map((patches || []).filter((item) => item.patch).map((item) => [item.path, item.patch]));
+  const results = [];
+  for (const file of files || []) results.push(await analyzeOne(sha, file, patchOf.get(file.path)));
+  const info = results.map((result) => result.info);
+  return { files: results, rows: results.flatMap((result) => result.rows), graph: autoGraph(info) || fallbackGraph(info) };
+}
+
+function fallbackGraph(info) {
+  const nodes = info.filter((item) => item.fallback).map((item) => ({ path: item.path, label: item.fallback, order: 0 }));
+  return nodes.length ? { nodes, edges: [] } : null;
 }

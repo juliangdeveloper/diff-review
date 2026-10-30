@@ -15,7 +15,7 @@ import { diffTexts } from "./linediff.js";
 import { buildGraph, clearGraph, graphPanel } from "./graph.js";
 import { SIDE, structurePanel } from "./structure.js";
 import {
-  branchSummary, commitFilesFor, commitStats, commitStatus, firstLine, newId,
+  branchSummary, commitFilesFor, commitStats, commitStatus, filesFor, firstLine, newId,
   restLines, reviewsFor, SHORT_SHA_LENGTH, shortSha, sortCommits, sortReviews, uniqueValues,
 } from "./model.js";
 
@@ -574,10 +574,9 @@ function openFile(list, path, line, side) {
 }
 
 function analysisFor(table, sha, files) {
-  const ready = files.filter((file) => file.content && !file.binary && file.received >= file.total);
-  if (!ready.length) return Promise.resolve(null);
+  if (!files.length) return Promise.resolve(null);
   if (!analyses.has(table)) {
-    analyses.set(table, import(OUTLINE_MODULE).then((mod) => mod.analyzeFiles(sha, ready)).catch((err) => {
+    analyses.set(table, import(OUTLINE_MODULE).then((mod) => mod.analyzeCommit(sha, files, filesFor(table.rows, sha))).catch((err) => {
       analyses.delete(table);
       throw err;
     }));
@@ -585,11 +584,23 @@ function analysisFor(table, sha, files) {
   return analyses.get(table);
 }
 
-function structureRows(table, files, analysis) {
-  if (!analysis) return table.structure ?? (table.files ? [] : null);
-  const own = new Set(files.filter((file) => file.content).map((file) => file.path));
-  const legacy = (table.structure || []).filter((row) => !own.has(row[NODE.PATH]));
-  return analysis.rows.concat(legacy);
+function structureRows(table, analysis, source) {
+  const agent = table.structure || [];
+  if (!analysis) return { rows: table.structure ?? (table.files ? [] : null), partial: false };
+  const agentPaths = new Set(agent.map((row) => row[NODE.PATH]));
+  const seen = new Set();
+  const rows = [];
+  let partial = false;
+  for (const file of analysis.files) {
+    seen.add(file.path);
+    if (file.source !== source.FULL && agentPaths.has(file.path)) {
+      rows.push(...agent.filter((row) => row[NODE.PATH] === file.path));
+      continue;
+    }
+    rows.push(...file.rows);
+    partial = partial || file.partial;
+  }
+  return { rows: rows.concat(agent.filter((row) => !seen.has(row[NODE.PATH]))), partial };
 }
 
 function filesSection(commit) {
@@ -639,7 +650,12 @@ function filesSection(commit) {
         },
         [VIEW.STRUCTURE]: {
           button: structBtn,
-          make: async () => structurePanel(structureRows(table, files, await analysisFor(table, sha, files)), { onOpen }),
+          make: async () => {
+            const analysis = await analysisFor(table, sha, files);
+            const { SOURCE } = await import(OUTLINE_MODULE);
+            const { rows, partial } = structureRows(table, analysis, SOURCE);
+            return structurePanel(rows, { onOpen, partial });
+          },
         },
       };
       let panel = null;

@@ -547,6 +547,7 @@ select { appearance: none; -webkit-appearance: none; background-image: linear-gr
 }
 
 .struct-card { display: grid; gap: 10px; margin: 8px 0 4px; min-width: 0; }
+.struct-partial { margin: 0; padding: 0 4px; font-size: 13px; color: var(--muted); }
 
 .struct-file {
   min-width: 0;

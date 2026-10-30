@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.4.1";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
@@ -166,6 +166,7 @@ export const NODE_KIND = Object.freeze({
   CLASS: "class",
   FUNCTION: "function",
   METHOD: "method",
+  FILE: "file",
 });
 
 export const HEADERS = Object.freeze({
@@ -234,6 +235,7 @@ export const LABEL = Object.freeze({
   }),
   kind: Object.freeze({
     module: "módulo",
+    file: "archivo",
     class: "clase",
     function: "función",
     method: "método",
