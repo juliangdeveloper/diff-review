@@ -19,8 +19,9 @@ flowchart LR
 ## Cómo se usa
 - En **Commits** ves la lista con su estado y la filtras por rama o estado; **Ramas** agrupa los commits por rama.
 - Abre un commit para leer el diff de cada archivo, con números de línea y ajuste de líneas largas. La app calcula el diff en el navegador a partir del contenido de cada archivo antes y después del commit.
-- **Graph**, en ese detalle, dibuja un bloque por archivo cambiado y flechas de quien provee a quien usa, armadas solas con los imports y las llamadas entre los archivos del commit. Cada bloque dice qué funciones agrega, cambia o quita. Si la hoja trae `graph_rule`, `graph_label`, `graph_order` o `graph_to`, esos datos ponen el título y reemplazan las frases, el orden o las flechas automáticas. Tocar un bloque abre el diff de ese archivo. Sin datos para dibujar, **Graph** muestra «Este commit no tiene datos de grafo».
-- **Estructura**, junto a **Graph**, muestra las funciones que cambiaron en cada archivo, marcadas como añadida, quitada o modificada, con sus condiciones, bucles, `return` y llamadas cambiadas. Tocar una función o una de sus líneas abre el diff de ese archivo en esa línea. Analiza JavaScript, TypeScript y Python en el navegador; el analizador se descarga solo la primera vez que abres **Estructura** o **Graph**.
+- **Graph**, en ese detalle, dibuja un bloque por archivo cambiado y flechas de quien provee a quien usa, armadas solas con los imports y las llamadas entre los archivos del commit. Cada bloque dice qué funciones agrega, cambia o quita. Si la hoja trae `graph_rule`, `graph_label`, `graph_order` o `graph_to`, esos datos ponen el título y reemplazan las frases, el orden o las flechas automáticas. Tocar un bloque abre el diff de ese archivo. Si no encuentra funciones ni conexiones, muestra un bloque por archivo con su tipo de cambio y sus líneas sumadas y quitadas; solo un commit sin archivos en la hoja muestra «Este commit no tiene datos de grafo».
+- **Estructura**, junto a **Graph**, muestra las funciones que cambiaron en cada archivo, marcadas como añadida, quitada o modificada, con sus condiciones, bucles, `return` y llamadas cambiadas. Tocar una función o una de sus líneas abre el diff de ese archivo en esa línea. Analiza JavaScript, TypeScript, Apps Script (`.gs`) y Python en el navegador; el analizador se descarga solo la primera vez que abres **Estructura** o **Graph**.
+- **Estructura** usa lo que haya en la hoja para cada archivo: el contenido completo de `files`; si falta, los fragmentos del `patch` de `diffs`, o las filas de `structure` si existen; y si no hay código que analizar (otro lenguaje, binario o contenido incompleto), el archivo aparece como un nodo con sus líneas sumadas y quitadas. Cuando a algún archivo le falta contenido, arriba aparece «Estructura parcial: faltan contenidos de algunos archivos». Las frases opcionales del agente nunca ocultan lo calculado.
 - **Aprobar**, **Rechazar** o **Comentar**, con un comentario opcional. Cada revisión queda en la pestaña `reviews` y aprobar o rechazar cambia el `status` del commit en la hoja; no toca git ni tu repositorio. Tu agente lee las revisiones con `load`. Comentar no cambia el estado.
 - En **Historial** revisas todas las revisiones, de la más reciente a la más antigua.
 - En **Ajustes** puedes poner un nombre de revisor para firmar tus revisiones.
@@ -40,7 +41,7 @@ La hoja se renombra `diff-review` y recibe sus pestañas (`commits`, `files`, `d
 
 La pestaña `files` lleva el contenido de cada archivo cambiado: `commit_sha`, `file_path`, `change_type`, `old_path`, `side`, `chunk_index`, `chunk_total` y `content`. `side` es `old` para el contenido antes del commit, `new` para el de después y `binary` para un archivo binario, que lleva una sola fila sin contenido. Un archivo nuevo solo lleva `new` y uno borrado solo `old`. Un contenido de más de 45.000 caracteres va partido en filas seguidas, con `chunk_index` desde 0.
 
-`meta` guarda `schema_version` 3. Con el `Code.gs` actual, una hoja con `schema_version` 1 o 2 recibe la pestaña `files` y sube a 3 en la siguiente petición, sin tocar los datos. Los commits viejos se siguen viendo igual: el diff sale del `patch` de `diffs` y **Estructura** de la pestaña `structure`, que se sigue leyendo si existe pero ya no se crea. Con un `Code.gs` anterior la app sigue mostrando esos commits viejos, pero no recibe `files`: un commit que solo trae contenido aparece sin diffs y con el aviso de actualizar `Code.gs`.
+`meta` guarda `schema_version` 3. Con el `Code.gs` actual, una hoja con `schema_version` 1 o 2 recibe la pestaña `files` y sube a 3 en la siguiente petición, sin tocar los datos. Los commits viejos se siguen viendo: el diff sale del `patch` de `diffs` y **Estructura** de la pestaña `structure`, que se sigue leyendo si existe pero ya no se crea, o, si no tiene filas para ese archivo, de los fragmentos del `patch`. Con un `Code.gs` anterior la app sigue mostrando esos commits viejos, pero no recibe `files`: un commit que solo trae contenido aparece sin diffs y con el aviso de actualizar `Code.gs`.
 
 Si cambias `Code.gs`: **Implementar → Gestionar implementaciones → Editar → Nueva versión** (la URL no cambia).
 
@@ -64,7 +65,7 @@ JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps 
 python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
-Versión actual: `diff-review v0.4.0`.
+Versión actual: `diff-review v0.4.1`.
 
 Licencia: [MIT](LICENSE).
 

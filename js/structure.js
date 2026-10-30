@@ -3,6 +3,8 @@ import { LABEL, NODE, NODE_KIND, NODE_STATUS } from "./config.js";
 export const SIDE = Object.freeze({ OLD: "old", NEW: "new" });
 const OWNER_KINDS = new Set(Object.values(NODE_KIND));
 const PANEL_ID = "commit-structure";
+const PARTIAL_NOTE = "Estructura parcial: faltan contenidos de algunos archivos.";
+const COUNTLESS_KINDS = new Set([NODE_KIND.MODULE, NODE_KIND.FILE]);
 const STATUS_ORDER = Object.freeze([NODE_STATUS.ADDED, NODE_STATUS.MODIFIED, NODE_STATUS.REMOVED]);
 
 function el(tag, className, text) {
@@ -47,7 +49,7 @@ export function buildStructure(rows) {
     }
     file.counts = Object.fromEntries(STATUS_ORDER.map((status) => [status, 0]));
     for (const node of file.nodes.values()) {
-      if (OWNER_KINDS.has(node.kind) && node.kind !== NODE_KIND.MODULE && node.status in file.counts) file.counts[node.status] += 1;
+      if (OWNER_KINDS.has(node.kind) && !COUNTLESS_KINDS.has(node.kind) && node.status in file.counts) file.counts[node.status] += 1;
     }
   }
   return [...files.values()];
@@ -118,7 +120,7 @@ function fileCard(file, onOpen) {
   return card;
 }
 
-export function structurePanel(rows, { onOpen } = {}) {
+export function structurePanel(rows, { onOpen, partial = false } = {}) {
   if (rows == null) return note("Para ver Estructura, actualiza Code.gs en tu hoja y publica una nueva versión.", "outdated");
   const files = buildStructure(rows);
   if (!files.length) return note("Este commit no tiene datos de estructura.", "empty");
@@ -126,6 +128,10 @@ export function structurePanel(rows, { onOpen } = {}) {
   section.id = PANEL_ID;
   section.dataset.state = "ready";
   section.setAttribute("aria-label", "Estructura del commit");
+  if (partial) {
+    section.dataset.partial = "true";
+    section.append(el("p", "struct-partial", PARTIAL_NOTE));
+  }
   for (const file of files) section.append(fileCard(file, onOpen));
   return section;
 }
