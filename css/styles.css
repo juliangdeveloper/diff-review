@@ -546,84 +546,84 @@ select { appearance: none; -webkit-appearance: none; background-image: linear-gr
   .graph-flow { transition: none; }
 }
 
-.struct-card { display: grid; gap: 10px; margin: 8px 0 4px; min-width: 0; }
+.flow-card { display: grid; gap: 8px; margin: 8px 0 4px; min-width: 0; }
 .struct-partial { margin: 0; padding: 0 4px; font-size: 13px; color: var(--muted); }
+.flow-frame { position: relative; min-width: 0; }
+.flow-toolbar { position: absolute; left: 8px; right: 8px; top: 8px; z-index: 4; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; pointer-events: none; }
+.flow-toolbar > * { pointer-events: auto; }
+.flow-chips { position: absolute; left: 8px; bottom: 8px; z-index: 4; display: flex; gap: 6px; pointer-events: none; }
+.flow-chip { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.flow-toolbar .pill { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.flow-toolbar .pill:not([aria-pressed="true"]) { background: #e2e8f0; color: #0f172a; }
+.flow-chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 18px; }
+.flow-chip.node-added { background: #15803d; color: #f0fdf4; }
+.flow-chip.node-removed { background: #b91c1c; color: #fef2f2; }
+.flow-chip.node-modified { background: #ca8a04; color: #1c1917; }
+.flow-sides { display: flex; gap: 4px; }
+.flow-sides[hidden] { display: none; }
+.flow-stage { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.flow-pane { display: grid; gap: 4px; min-width: 0; }
+.flow-pane-title { position: absolute; left: 8px; top: 8px; z-index: 3; padding: 2px 8px; border-radius: 999px; background: rgba(15, 23, 42, 0.85); color: #e2e8f0; font-size: 12px; font-weight: 700; pointer-events: none; }
 
-.struct-file {
-  min-width: 0;
-  padding: 4px 0 8px;
-  border-radius: var(--radius);
-  background: var(--card);
+.flow-canvas {
+  position: relative;
+  height: var(--flow-h, 240px);
   overflow: hidden;
+  border-radius: 14px;
+  background-color: #020617;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.28) 1px, transparent 1px);
+  background-size: 20px 20px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+  contain: strict;
 }
+.flow-canvas:active { cursor: grabbing; }
+.flow-blank { display: grid; place-items: center; }
+.flow-blank-note { margin: 0; padding: 12px; color: #94a3b8; font-size: 14px; text-align: center; }
+.flow-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.flow-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 1; }
+.flow-animated { stroke-dasharray: 5; animation: flow-dash 0.5s linear infinite; }
+@keyframes flow-dash { to { stroke-dashoffset: -10; } }
 
-.struct-file button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
+.flow-node { position: absolute; box-sizing: border-box; color: var(--fg); cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.flow-node:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+.flow-group { z-index: 0; background: color-mix(in srgb, var(--bg) 13%, transparent); border: 2px solid var(--bg); border-radius: 10px; }
+.flow-head { padding: 8px 12px 7px; border-radius: 8px 8px 0 0; background: var(--bg); color: var(--fg); line-height: 1.25; }
+.flow-title, .flow-title-compact { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.2px; }
+.flow-title { font-size: 20px; font-weight: 700; }
+.flow-title-compact { display: none; font-size: 34px; font-weight: 800; }
+.flow-compact .flow-title, .flow-compact .flow-meta { display: none; }
+.flow-compact .flow-title-compact { display: block; }
+.flow-meta { margin-top: 2px; font: 11px/1.3 var(--mono); opacity: 0.88; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-strip { display: flex; align-items: center; min-height: 30px; padding: 0 10px; background: #bbbbbb; color: #111111; border-top: 1px solid rgba(15, 23, 42, 0.25); font: 600 12px/1.1 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-deps { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0 0 8px 8px; }
 
-.struct-file button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.flow-process, .flow-pill { z-index: 2; display: flex; align-items: center; justify-content: center; padding: 6px 14px; background: var(--bg); border: 1px solid #475569; text-align: center; overflow: hidden; }
+.flow-process { border-radius: 6px; }
+.flow-pill { padding: 6px 16px; border-radius: 999px; }
+.flow-body { min-width: 0; max-width: 100%; }
+.flow-leaf-title { font-size: 12px; opacity: 0.85; }
+.flow-code { margin-top: 2px; font: 12px/1.3 var(--mono); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.flow-diamond { z-index: 2; display: grid; place-items: center; }
+.flow-diamond-shape { position: relative; display: grid; place-items: center; width: 120px; height: 120px; background: var(--bg); border: 1px solid #475569; transform: rotate(45deg); }
+.flow-diamond-shape .flow-body { max-width: 92px; transform: rotate(-45deg); text-align: center; overflow-wrap: anywhere; }
+.flow-diamond .flow-leaf-title { font-size: 10px; opacity: 0.75; }
+.flow-diamond .flow-code { font-size: 10px; line-height: 1.2; -webkit-line-clamp: 4; }
+.flow-handle { position: absolute; font-size: 14px; font-weight: 800; line-height: 1; pointer-events: none; }
+.flow-handle-t { left: calc(50% + 92px); top: calc(50% - 22px); color: #4ade80; text-shadow: 0 0 8px rgba(34, 197, 94, 0.55); }
+.flow-handle-n { right: calc(50% + 92px); top: calc(50% - 22px); color: #cbd5e1; text-shadow: 0 0 8px rgba(203, 213, 225, 0.5); }
+.flow-handle-f { left: calc(50% + 8px); top: calc(50% + 86px); color: #f87171; text-shadow: 0 0 8px rgba(248, 113, 113, 0.55); }
+.flow-node.selected:not(.flow-diamond), .flow-node.selected .flow-diamond-shape { border: 5px solid #f8fafc; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.95), 0 0 22px rgba(56, 189, 248, 0.85); }
 
-.struct-path { padding: 10px 14px 8px; flex-wrap: wrap; }
-.struct-path-text { flex: 1 1 60%; min-width: 0; font: 600 13px/1.35 var(--mono); overflow-wrap: anywhere; }
-.struct-counts { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
-.struct-count { font-weight: 600; }
+.flow-controls { position: absolute; right: 10px; bottom: 10px; z-index: 3; display: grid; gap: 1px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45); }
+.flow-control { width: 44px; height: 40px; border: 0; background: #f8fafc; color: #0f172a; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; }
+.flow-control:active { background: #cbd5e1; }
+.flow-control:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
-.struct-card ul { margin: 0; padding: 0; list-style: none; min-width: 0; }
-.struct-file > .struct-children { display: grid; gap: 6px; padding: 0 10px; }
-
-.struct-node {
-  min-width: 0;
-  border-radius: 10px;
-  background: var(--fill);
-  border-left: 3px solid var(--muted);
-  overflow: hidden;
-}
-
-.struct-head { padding: 8px 10px; }
-.struct-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; }
-.struct-name { font: 600 14px/1.3 var(--mono); overflow-wrap: anywhere; }
-.struct-params { min-width: 0; color: var(--muted); font: 12px/1.3 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-
-.struct-kind {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 5px;
-  background: var(--card);
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 18px;
-}
-
-.node-badge { padding: 1px 8px; font-size: 11px; }
-.struct-node .struct-children { padding: 0 6px 6px 14px; display: grid; gap: 2px; }
-.struct-node .struct-node { background: var(--card); }
-
-.struct-leaf-btn { padding: 5px 6px; border-radius: 7px; }
-.struct-leaf-btn:active, .struct-head:active, .struct-path:active { background: var(--hunk); }
-.struct-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.struct-code { flex: 1; min-width: 0; font: 12px/1.35 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.node-added { border-left-color: var(--green); }
-.node-removed { border-left-color: var(--red); }
-.node-modified { border-left-color: var(--orange); }
-.node-badge.node-added, .struct-count.node-added { background: var(--green-bg); color: var(--green); }
-.node-badge.node-removed, .struct-count.node-removed { background: var(--red-bg); color: var(--red); }
-.node-badge.node-modified, .struct-count.node-modified { background: var(--orange-bg); color: var(--orange); }
-.struct-count { padding: 0 6px; border-radius: 5px; line-height: 18px; }
-.struct-leaf.node-added .struct-dot { background: var(--green); }
-.struct-leaf.node-removed .struct-dot { background: var(--red); }
-.struct-leaf.node-modified .struct-dot { background: var(--orange); }
-.struct-leaf.node-removed .struct-code { text-decoration: line-through; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .flow-animated { animation: none; } }
 
 .graph-node { cursor: pointer; }
 .graph-node:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; }

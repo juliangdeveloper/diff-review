@@ -20,8 +20,8 @@ flowchart LR
 - En **Commits** ves la lista con su estado y la filtras por rama o estado; **Ramas** agrupa los commits por rama.
 - Abre un commit para leer el diff de cada archivo, con números de línea y ajuste de líneas largas. La app calcula el diff en el navegador a partir del contenido de cada archivo antes y después del commit.
 - **Graph**, en ese detalle, dibuja un bloque por archivo cambiado y flechas de quien provee a quien usa, armadas solas con los imports y las llamadas entre los archivos del commit. Cada bloque dice qué funciones agrega, cambia o quita. Si la hoja trae `graph_rule`, `graph_label`, `graph_order` o `graph_to`, esos datos ponen el título y reemplazan las frases, el orden o las flechas automáticas. Tocar un bloque abre el diff de ese archivo. Si no encuentra funciones ni conexiones, muestra un bloque por archivo con su tipo de cambio y sus líneas sumadas y quitadas; solo un commit sin archivos en la hoja muestra «Este commit no tiene datos de grafo».
-- **Estructura**, junto a **Graph**, muestra las funciones que cambiaron en cada archivo, marcadas como añadida, quitada o modificada, con sus condiciones, bucles, `return` y llamadas cambiadas. Tocar una función o una de sus líneas abre el diff de ese archivo en esa línea. Analiza JavaScript, TypeScript, Apps Script (`.gs`) y Python en el navegador; el analizador se descarga solo la primera vez que abres **Estructura** o **Graph**.
-- **Estructura** usa lo que haya en la hoja para cada archivo: el contenido completo de `files`; si falta, los fragmentos del `patch` de `diffs`, o las filas de `structure` si existen; y si no hay código que analizar (otro lenguaje, binario o contenido incompleto), el archivo aparece como un nodo con sus líneas sumadas y quitadas. Cuando a algún archivo le falta contenido, arriba aparece «Estructura parcial: faltan contenidos de algunos archivos». Las frases opcionales del agente nunca ocultan lo calculado.
+- **Estructura**, junto a **Graph**, es un diagrama de flujo del commit con el método de [diffgraph](https://github.com/miltonlaufer/diffgraph): cada clase y función cambiada es un recuadro con sus parámetros y sus pasos dentro (rombos para `if` y `switch`; píldoras para `return`, `throw` y bucles; rectángulos para llamadas y `try`), unidos por flechas de flujo marcadas T, F o next y por flechas `calls` entre funciones. Verde es añadido, rojo quitado y amarillo modificado. Muestra **Antes** y **Después** lado a lado en pantallas anchas y con un selector en el iPhone; **Solo cambios** oculta lo que no cambió. Se mueve arrastrando, se acerca pellizcando o con los botones, y ⤢ lo encuadra entero. Tocar un nodo abre el diff de ese archivo en su línea. Analiza JavaScript, TypeScript, Apps Script (`.gs`) y Python en el navegador; el analizador se descarga solo la primera vez que abres **Estructura** o **Graph**.
+- **Estructura** usa lo que haya en la hoja para cada archivo: el contenido completo de `files`; si falta, las filas de `structure` si existen o, si no, los fragmentos del `patch` de `diffs`; y si no hay código que analizar (otro lenguaje, binario o contenido incompleto), el archivo aparece como un nodo con sus líneas sumadas y quitadas. Cuando a algún archivo le falta contenido, arriba aparece «Estructura parcial: faltan contenidos de algunos archivos». Las frases opcionales del agente nunca ocultan lo calculado.
 - **Aprobar**, **Rechazar** o **Comentar**, con un comentario opcional. Cada revisión queda en la pestaña `reviews` y aprobar o rechazar cambia el `status` del commit en la hoja; no toca git ni tu repositorio. Tu agente lee las revisiones con `load`. Comentar no cambia el estado.
 - En **Historial** revisas todas las revisiones, de la más reciente a la más antigua.
 - En **Ajustes** puedes poner un nombre de revisor para firmar tus revisiones.
@@ -59,17 +59,17 @@ Con ese contenido la app calcula en el navegador el diff unificado y las líneas
 - Si se filtran, cambia `SECRET` en las propiedades del script y actualiza la clave en **Ajustes**.
 
 ## Stack
-JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler ni paso de build: el analizador de código es [Lezer](https://lezer.codemirror.net/) (licencia MIT, de Marijn Haverbeke), copiado ya minificado en [`js/vendor/lezer`](js/vendor/lezer) con su [aviso de licencia](js/vendor/lezer/LICENSE).
+JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler ni paso de build: el analizador de código es [Lezer](https://lezer.codemirror.net/) (licencia MIT, de Marijn Haverbeke), copiado ya minificado en [`js/vendor/lezer`](js/vendor/lezer) con su [aviso de licencia](js/vendor/lezer/LICENSE), y el diagrama de **Estructura** se ordena con [dagre](https://github.com/dagrejs/dagre) (licencia MIT, de Chris Pettitt), copiado sin cambios en [`js/vendor/dagre`](js/vendor/dagre) con su [aviso de licencia](js/vendor/dagre/LICENSE).
 
 ```
 python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
 ```
 
-Versión actual: `diff-review v0.4.1`.
+Versión actual: `diff-review v0.5.0`.
 
 Licencia: [MIT](LICENSE).
 
-**Estructura** se inspira en [diffgraph](https://github.com/miltonlaufer/diffgraph) de Milton Läufer (licencia MIT). El código de diff-review es propio y no copia código de diffgraph.
+El análisis, la comparación y el diagrama de **Estructura** en [`js/diffgraph`](js/diffgraph) son una adaptación a JavaScript del código de [diffgraph](https://github.com/miltonlaufer/diffgraph) de Milton Läufer (licencia MIT), con su [aviso de licencia](js/diffgraph/LICENSE).
 
 ---
 
