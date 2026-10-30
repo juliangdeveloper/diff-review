@@ -1,4 +1,4 @@
-import { CHANGE, COMMIT, DECISION_STATUS, DIFF, REVIEW, STATUS } from "./config.js";
+import { CHANGE, COMMIT, DECISION_STATUS, DIFF, FILE, FILE_SIDE, REVIEW, STATUS } from "./config.js";
 import { toNumber } from "./sheets.js";
 import { joinChunks } from "./diff.js";
 
@@ -108,6 +108,54 @@ export function filesFor(diffRows, sha) {
     });
   }
   return [...groups.values()].map((file) => ({ ...file, ...joinChunks(file.chunks) }));
+}
+
+function joinContent(chunks) {
+  const sorted = chunks.slice().sort((a, b) => a.index - b.index);
+  const seen = new Set(sorted.map((chunk) => chunk.index));
+  const total = sorted.reduce((max, chunk) => Math.max(max, chunk.total), 0);
+  return { text: sorted.map((chunk) => chunk.content).join(""), received: seen.size, total: Math.max(total, seen.size) };
+}
+
+export function contentFilesFor(fileRows, sha) {
+  const groups = new Map();
+  for (const row of fileRows || []) {
+    if (row[FILE.SHA] !== sha) continue;
+    const key = [row[FILE.PATH], row[FILE.OLD_PATH], row[FILE.CHANGE]].join(KEY_SEPARATOR);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        path: row[FILE.PATH],
+        oldPath: row[FILE.OLD_PATH],
+        change: row[FILE.CHANGE].toUpperCase() || CHANGE.MODIFIED,
+        sides: new Map(),
+      });
+    }
+    const side = String(row[FILE.SIDE] || "").toLowerCase();
+    const sides = groups.get(key).sides;
+    if (!sides.has(side)) sides.set(side, []);
+    sides.get(side).push({ index: toNumber(row[FILE.CHUNK]), total: toNumber(row[FILE.CHUNKS]), content: row[FILE.CONTENT] });
+  }
+  return [...groups.values()].map(({ sides, ...file }) => {
+    const before = sides.has(FILE_SIDE.OLD) ? joinContent(sides.get(FILE_SIDE.OLD)) : null;
+    const after = sides.has(FILE_SIDE.NEW) ? joinContent(sides.get(FILE_SIDE.NEW)) : null;
+    const parts = [before, after].filter(Boolean);
+    return {
+      ...file,
+      content: true,
+      binary: sides.has(FILE_SIDE.BINARY),
+      old: before ? before.text : null,
+      new: after ? after.text : null,
+      received: parts.reduce((sum, part) => sum + part.received, 0),
+      total: parts.reduce((sum, part) => sum + part.total, 0),
+    };
+  });
+}
+
+export function commitFilesFor(table, sha) {
+  const content = contentFilesFor(table.files, sha);
+  const paths = new Set(content.map((file) => file.path));
+  const legacy = filesFor(table.rows, sha).filter((file) => !paths.has(file.path));
+  return content.concat(legacy);
 }
 
 export function newId() {

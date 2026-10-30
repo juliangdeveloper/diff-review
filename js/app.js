@@ -1,6 +1,7 @@
 import {
   APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
-  HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE, STATUS, STORAGE, URLS,
+  CONTENT_CHUNK_MAX, HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, NODE, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE,
+  SCHEMA_VERSION, STATUS, STORAGE, TAB, URLS,
 } from "./config.js";
 import { AppError } from "./errors.js";
 import { checkSchema, parseDiffs, parseLoad } from "./sheets.js";
@@ -10,10 +11,11 @@ import {
 import { createDemoBackend } from "./demo.js";
 import { aiPrompt } from "./prompt.js";
 import { parsePatch, renderLines } from "./diff.js";
+import { diffTexts } from "./linediff.js";
 import { buildGraph, clearGraph, graphPanel } from "./graph.js";
 import { SIDE, structurePanel } from "./structure.js";
 import {
-  branchSummary, commitStats, commitStatus, filesFor, firstLine, newId,
+  branchSummary, commitFilesFor, commitStats, commitStatus, firstLine, newId,
   restLines, reviewsFor, SHORT_SHA_LENGTH, shortSha, sortCommits, sortReviews, uniqueValues,
 } from "./model.js";
 
@@ -21,6 +23,8 @@ const TOAST_MS = 2600;
 const FLASH_MS = 1600;
 const VIEW = Object.freeze({ GRAPH: "graph", STRUCTURE: "structure" });
 const fillers = new WeakMap();
+const analyses = new WeakMap();
+const OUTLINE_MODULE = "./outline.js";
 const LOCALE = "es-CO";
 const ROUTE_SEPARATOR = "/";
 const HASH_PREFIX = "#/";
@@ -55,7 +59,7 @@ const ERROR_TEXT = Object.freeze({
   [ERROR.BAD_REQUEST]: "La aplicación web no reconoce la petición. Actualiza Code.gs y publica una nueva versión.",
   [ERROR.TABS]: "A la hoja le faltan pestañas: ",
   [ERROR.HEADERS]: "Faltan columnas en la hoja: ",
-  [ERROR.SCHEMA]: "La hoja no es compatible. En meta se espera schema_version = 1 o 2 y se encontró: ",
+  [ERROR.SCHEMA]: "La hoja no es compatible. En meta se espera schema_version = 1, 2 o 3 y se encontró: ",
   [ERROR.NOT_FOUND]: "No se encontró el commit en la hoja: ",
   [ERROR.DECISION]: "Decisión no válida: ",
   [ERROR.LOCK]: "La hoja está ocupada. Intenta otra vez.",
@@ -500,10 +504,17 @@ async function submitReview(commit, decision, form) {
   }
 }
 
+function parseFile(file, incomplete) {
+  if (!file.content) return parsePatch(file.patch);
+  if (file.binary) return { lines: [], binary: true, additions: 0, deletions: 0 };
+  if (incomplete) return { lines: [], binary: false, additions: 0, deletions: 0 };
+  return diffTexts(file.old, file.new);
+}
+
 function fileNode(file, autoOpen) {
-  const parsed = parsePatch(file.patch);
-  const large = parsed.lines.length > LARGE_FILE_LINES;
   const incomplete = file.received < file.total;
+  const parsed = parseFile(file, incomplete);
+  const large = parsed.lines.length > LARGE_FILE_LINES;
   const renamed = file.oldPath && file.oldPath !== file.path;
   const details = h("details", { class: "file" });
   details.dataset.path = file.path;
@@ -527,7 +538,8 @@ function fileNode(file, autoOpen) {
   const fill = () => {
     if (filled) return;
     filled = true;
-    if (incomplete) body.append(h("p", { class: "warn", text: `Faltan partes del diff: llegaron ${file.received} de ${file.total}.` }));
+    if (incomplete) body.append(h("p", { class: "warn", text: `Faltan partes ${file.content ? "del contenido" : "del diff"}: llegaron ${file.received} de ${file.total}.` }));
+    if (incomplete && file.content) return;
     if (parsed.binary) body.append(h("p", { class: "note", text: "Archivo binario: no hay diff de texto." }));
     else if (!parsed.lines.length) body.append(h("p", { class: "note", text: renamed ? "Solo se renombró, sin cambios de contenido." : "Sin cambios de texto." }));
     else body.append(h("div", { class: "diff-scroll" }, renderLines(parsed)));
@@ -559,6 +571,25 @@ function openFile(list, path, line, side) {
   void flash.offsetWidth;
   flash.classList.add("flash");
   setTimeout(() => flash.classList.remove("flash"), FLASH_MS);
+}
+
+function analysisFor(table, sha, files) {
+  const ready = files.filter((file) => file.content && !file.binary && file.received >= file.total);
+  if (!ready.length) return Promise.resolve(null);
+  if (!analyses.has(table)) {
+    analyses.set(table, import(OUTLINE_MODULE).then((mod) => mod.analyzeFiles(sha, ready)).catch((err) => {
+      analyses.delete(table);
+      throw err;
+    }));
+  }
+  return analyses.get(table);
+}
+
+function structureRows(table, files, analysis) {
+  if (!analysis) return table.structure ?? (table.files ? [] : null);
+  const own = new Set(files.filter((file) => file.content).map((file) => file.path));
+  const legacy = (table.structure || []).filter((row) => !own.has(row[NODE.PATH]));
+  return analysis.rows.concat(legacy);
 }
 
 function filesSection(commit) {
@@ -593,17 +624,23 @@ function filesSection(commit) {
   const sha = commit[COMMIT.SHA];
   ensureDiffs(sha)
     .then((table) => {
-      const files = filesFor(table.rows, sha);
+      const files = commitFilesFor(table, sha);
       section.querySelector("#files-title").textContent = `Archivos (${files.length})`;
       const autoOpen = files.length <= AUTO_OPEN_MAX_FILES;
       list.replaceChildren(...(files.length
         ? files.map((file) => fileNode(file, autoOpen))
-        : [h("p", { class: "note", text: "Este commit no tiene diffs en la hoja." })]));
-      const graph = buildGraph(commit, table.rows);
+        : [h("p", { class: "note", text: table.files ? "Este commit no tiene diffs en la hoja." : "Este commit no tiene diffs en la hoja. Si tu agente sube su contenido en files, actualiza Code.gs y publica una nueva versión." })]));
       const onOpen = (path, line, side) => openFile(list, path, line, side);
+      const graphRows = table.rows.concat(table.files || []);
       const views = {
-        [VIEW.GRAPH]: { button: graphBtn, make: () => graphPanel(graph, { onOpen }) },
-        [VIEW.STRUCTURE]: { button: structBtn, make: () => structurePanel(table.structure, { onOpen }) },
+        [VIEW.GRAPH]: {
+          button: graphBtn,
+          make: async () => graphPanel(buildGraph(commit, graphRows, (await analysisFor(table, sha, files))?.graph || null), { onOpen }),
+        },
+        [VIEW.STRUCTURE]: {
+          button: structBtn,
+          make: async () => structurePanel(structureRows(table, files, await analysisFor(table, sha, files)), { onOpen }),
+        },
       };
       let panel = null;
       let current = "";
@@ -615,8 +652,17 @@ function filesSection(commit) {
         current = next;
         for (const [key, view] of Object.entries(views)) view.button.setAttribute("aria-pressed", String(key === next));
         if (!next) return;
-        panel = views[next].make();
-        list.before(panel);
+        const waiting = h("p", { class: "graph-empty", text: "Analizando el código…" });
+        waiting.dataset.state = "loading";
+        panel = waiting;
+        list.before(waiting);
+        views[next].make()
+          .catch(() => h("p", { class: "warn", text: "No se pudo analizar el código de este commit." }))
+          .then((made) => {
+            if (panel !== waiting) return;
+            panel = made;
+            waiting.replaceWith(made);
+          });
       };
       for (const [name, view] of Object.entries(views)) {
         view.button.disabled = false;
@@ -747,7 +793,7 @@ function copyFallback(text) {
 }
 
 function promptText() {
-  return aiPrompt(new URL(".", location.href.split("#")[0]).href);
+  return aiPrompt();
 }
 
 async function copyPrompt(e) {
@@ -797,10 +843,11 @@ function fillSetup() {
     h("p", { class: "setup-note", id: "setup-note", role: "status", "aria-live": "polite", hidden: true }),
     h("pre", { class: "code-block", tabindex: "0" }, code),
     h("h3", { text: "Pestañas y columnas" }),
-    h("p", { class: "hint" }, Object.entries(HEADERS).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))),
-    h("p", { class: "hint", text: "Opcionales, para Graph. Si no están, el commit se ve como siempre. Una hoja nueva las recibe; una hoja ya armada no se modifica. commits: graph_rule. diffs: graph_label, graph_order, graph_to. graph_rule es el título, graph_label la frase del archivo, graph_order el orden y graph_to los file_path de destino separados por |." }),
-    h("p", { class: "hint", text: "structure es para Estructura y la llena el agente con tools/structure.mjs después de cada commit. Si tu hoja tiene schema_version 1, el Code.gs actual le agrega la pestaña y sube la versión a 2 sin tocar los datos." }),
-    h("p", { class: "hint", text: "Carga commits y diffs en modo RAW. patch va en fragmentos de hasta 40.000 caracteres y chunk_index empieza en 0. La app escribe en reviews y en commits.status." }));
+    h("p", { class: "hint" }, Object.entries(HEADERS).filter(([tab]) => tab !== TAB.STRUCTURE).map(([tab, cols]) => h("span", { class: "mono block", text: `${tab}: ${cols.join(", ")}` }))),
+    h("p", { class: "hint", text: `files lleva el contenido completo de cada archivo antes (side old) y después (side new) del commit, en fragmentos de hasta ${CONTENT_CHUNK_MAX.toLocaleString(LOCALE)} caracteres; chunk_index empieza en 0. Un archivo nuevo no lleva old, uno borrado no lleva new y uno binario lleva una sola fila con side binary. Con eso la app calcula el diff, Estructura y Graph.` }),
+    h("p", { class: "hint", text: "Opcionales, para Graph. Si no están, Graph se arma solo con los imports y llamadas entre los archivos del commit. commits: graph_rule. files: graph_label, graph_order, graph_to. graph_rule es el título, graph_label la frase del archivo, graph_order el orden y graph_to los file_path de destino separados por |." }),
+    h("p", { class: "hint", text: `Los commits viejos con patch en diffs y filas en structure se siguen viendo igual. Si tu hoja tiene schema_version 1 o 2, el Code.gs actual le agrega files y sube la versión a ${SCHEMA_VERSION} sin tocar los datos.` }),
+    h("p", { class: "hint", text: "Carga en modo RAW. La app escribe en reviews y en commits.status." }));
   loadCode()
     .then((text) => {
       code.textContent = text;

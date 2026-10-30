@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.4.0";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
@@ -11,10 +11,11 @@ export const PORTFOLIO = Object.freeze({
     objetivo: "Open source para revisar diffs de commits en el celular y aprobar, rechazar o comentar.",
   }),
 });
-export const SCHEMA_VERSION = 2;
-export const SUPPORTED_SCHEMAS = Object.freeze(["1", String(SCHEMA_VERSION)]);
+export const SCHEMA_VERSION = 3;
+export const SUPPORTED_SCHEMAS = Object.freeze(["1", "2", String(SCHEMA_VERSION)]);
 export const SCHEMA_KEY = "schema_version";
 export const PATCH_CHUNK_MAX = 40000;
+export const CONTENT_CHUNK_MAX = 45000;
 export const LARGE_FILE_LINES = 800;
 export const AUTO_OPEN_MAX_FILES = 8;
 export const REQUEST_TIMEOUT_MS = 30000;
@@ -38,8 +39,6 @@ export const LEGACY_STORAGE = Object.freeze([
 export const URLS = Object.freeze({
   NEW_SHEET: "https://sheets.new",
   CODE_GS: "apps-script/Code.gs",
-  STRUCTURE_JS: "tools/structure.mjs",
-  STRUCTURE_PY: "tools/structure.py",
 });
 
 export const ACTION = Object.freeze({
@@ -71,6 +70,7 @@ export const DEMO_ON = "1";
 
 export const TAB = Object.freeze({
   COMMITS: "commits",
+  FILES: "files",
   DIFFS: "diffs",
   STRUCTURE: "structure",
   REVIEWS: "reviews",
@@ -101,6 +101,23 @@ export const DIFF = Object.freeze({
   CHUNK: "chunk_index",
   CHUNKS: "chunk_total",
   PATCH: "patch",
+});
+
+export const FILE = Object.freeze({
+  SHA: "commit_sha",
+  PATH: "file_path",
+  CHANGE: "change_type",
+  OLD_PATH: "old_path",
+  SIDE: "side",
+  CHUNK: "chunk_index",
+  CHUNKS: "chunk_total",
+  CONTENT: "content",
+});
+
+export const FILE_SIDE = Object.freeze({
+  OLD: "old",
+  NEW: "new",
+  BINARY: "binary",
 });
 
 export const REVIEW = Object.freeze({
@@ -153,6 +170,7 @@ export const NODE_KIND = Object.freeze({
 
 export const HEADERS = Object.freeze({
   [TAB.COMMITS]: Object.freeze(Object.values(COMMIT)),
+  [TAB.FILES]: Object.freeze(Object.values(FILE)),
   [TAB.DIFFS]: Object.freeze(Object.values(DIFF)),
   [TAB.STRUCTURE]: Object.freeze(Object.values(NODE)),
   [TAB.REVIEWS]: Object.freeze(Object.values(REVIEW)),
@@ -161,8 +179,11 @@ export const HEADERS = Object.freeze({
 
 export const OPTIONAL = Object.freeze({
   [TAB.COMMITS]: Object.freeze([GRAPH.RULE]),
+  [TAB.FILES]: Object.freeze([GRAPH.LABEL, GRAPH.ORDER, GRAPH.TO]),
   [TAB.DIFFS]: Object.freeze([GRAPH.LABEL, GRAPH.ORDER, GRAPH.TO]),
 });
+
+export const RAW_FIELDS = Object.freeze([DIFF.PATCH, FILE.CONTENT]);
 
 export const STATUS = Object.freeze({
   PENDING: "pending",

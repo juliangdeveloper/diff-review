@@ -25,19 +25,21 @@ function cleanLabel(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
-export function buildGraph(commit, diffRows) {
+export function buildGraph(commit, diffRows, auto = null) {
   const sha = String(commit?.[COMMIT.SHA] ?? "");
   const rule = cleanLabel(commit?.[GRAPH.RULE]);
   const groups = new Map();
   let seq = 0;
+  const groupOf = (path) => {
+    if (!groups.has(path)) groups.set(path, { path, label: "", order: null, tos: [], seq: seq++ });
+    return groups.get(path);
+  };
+  for (const node of auto?.nodes || []) groupOf(node.path);
   for (const row of diffRows || []) {
     if (row?.[DIFF.SHA] !== sha) continue;
     const path = cleanLabel(row[DIFF.PATH]);
     if (!path) continue;
-    if (!groups.has(path)) {
-      groups.set(path, { path, label: "", order: null, tos: [], seq: seq++ });
-    }
-    const group = groups.get(path);
+    const group = groupOf(path);
     if (!group.label) group.label = cleanLabel(row[GRAPH.LABEL]);
     if (group.order == null) {
       const order = parseOrder(row[GRAPH.ORDER]);
@@ -48,16 +50,30 @@ export function buildGraph(commit, diffRows) {
     }
   }
 
+  const all = [...groups.values()];
+  const agentEdges = all.some((group) => group.tos.length);
+  const agentOrders = all.some((group) => group.order != null);
+  if (auto) {
+    for (const node of auto.nodes) {
+      const group = groups.get(node.path);
+      if (!group.label) group.label = node.label;
+      if (!agentOrders && !agentEdges) group.order = node.order;
+    }
+  }
+
   const edges = [];
   const seen = new Set();
-  for (const group of groups.values()) {
-    for (const target of group.tos) {
-      if (target === group.path || !groups.has(target)) continue;
-      const key = `${group.path}\0${target}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ from: group.path, to: target });
-    }
+  const link = (from, to) => {
+    if (from === to || !groups.has(from) || !groups.has(to)) return;
+    const key = `${from}\0${to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({ from, to });
+  };
+  if (agentEdges || !auto) {
+    for (const group of all) group.tos.forEach((target) => link(group.path, target));
+  } else {
+    auto.edges.forEach((edge) => link(edge.from, edge.to));
   }
 
   const linked = new Set();
@@ -65,7 +81,7 @@ export function buildGraph(commit, diffRows) {
     linked.add(edge.from);
     linked.add(edge.to);
   }
-  const nodes = [...groups.values()]
+  const nodes = all
     .filter((group) => group.label || group.order != null || linked.has(group.path))
     .sort((a, b) => {
       const ao = a.order == null ? Number.POSITIVE_INFINITY : a.order;

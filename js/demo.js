@@ -1,6 +1,9 @@
-import { COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, GRAPH, HEADERS, NODE, OPTIONAL, REVIEW, SCHEMA_VERSION, STATUS, TAB } from "./config.js";
+import {
+  COMMIT, DECISION, DECISION_STATUS, DIFF, ERROR, FILE, FILE_SIDE, GRAPH, HEADERS, OPTIONAL, REVIEW, SCHEMA_VERSION, STATUS, TAB,
+} from "./config.js";
 import { AppError } from "./errors.js";
 import { parsePatch } from "./diff.js";
+import { diffTexts } from "./linediff.js";
 
 export const DEMO_TITLE = "Revisiones de ejemplo";
 const REPO = "ejemplo/tienda-web";
@@ -46,101 +49,152 @@ const COMMITS = [
   },
 ];
 
-const CART_PATCH = [
-  "@@ -1,10 +1,17 @@",
-  " import { formatMoney } from \"./money.js\";",
-  "+import { couponRate } from \"./coupons.js\";",
-  " ",
-  " export function cartTotal(items, coupon) {",
-  "-  const subtotal = items.reduce((sum, item) => sum + item.price, 0);",
-  "-  return subtotal * 1.19;",
-  "+  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);",
-  "+  const discount = subtotal * couponRate(coupon);",
-  "+  const taxed = (subtotal - discount) * 1.19;",
-  "+  return Math.round(taxed);",
-  " }",
-  " ",
-  " export function cartSummary(items, coupon) {",
-  "-  return formatMoney(cartTotal(items));",
-  "+  const total = cartTotal(items, coupon);",
-  "+  return {",
-  "+    items: items.length,",
-  "+    total: formatMoney(total),",
-  "+  };",
-  " }",
+const SUMMARY_OLD = [
+  "import { formatMoney } from \"./money.js\";",
+  "",
+  "export function orderTitle(order) {",
+  "  return order.name;",
+  "}",
+  "",
+  "export function renderSummary(order) {",
+  "  const lines = order.items.map((item) => item.name);",
+  "  const total = \"$\" + order.total;",
+  "  return lines.concat(total).join(\"\\n\");",
+  "}",
 ].join("\n");
 
-const COUPON_PATCH = [
-  "@@ -0,0 +1,9 @@",
-  "+const RATES = Object.freeze({",
-  "+  BIENVENIDA: 0.1,",
-  "+  AMIGOS: 0.15,",
-  "+});",
-  "+",
-  "+export function couponRate(code) {",
-  "+  const key = String(code || \"\").trim().toUpperCase();",
-  "+  return RATES[key] || 0;",
-  "+}",
+const SUMMARY_NEW = [
+  "import { formatMoney } from \"./money.js\";",
+  "",
+  "export function orderTitle(order) {",
+  "  return order.name;",
+  "}",
+  "",
+  "export function renderSummary(order) {",
+  "  const lines = order.items.map((item) => item.name);",
+  "  const total = formatMoney(order.total);",
+  "  const header = `Pedido ${order.id}`;",
+  "  return [header, ...lines, total].join(\"\\n\");",
+  "}",
 ].join("\n");
 
-const TEST_PATCH = [
-  "@@ -4,4 +4,8 @@ import { cartTotal } from \"../src/cart.js\";",
-  " test(\"suma los productos\", () => {",
-  "   assert.equal(cartTotal([{ price: 100, qty: 1 }]), 119);",
-  " });",
-  "+",
-  "+test(\"aplica el cupón antes del IVA\", () => {",
-  "+  const items = [{ price: 1000, qty: 2 }];",
-  "+  assert.equal(cartTotal(items, \"bienvenida\"), 2142);",
-  "+});",
-  "-test(\"pendiente\", () => {});",
+const PRICE_OLD = [
+  "export function toCents(value) {",
+  "  return Math.round(value * 100);",
+  "}",
+  "",
+  "export function fromCents(value) {",
+  "  return value / 100;",
+  "}",
+  "",
+  "export function formatMoney(value) {",
+  "  return \"$\" + value;",
+  "}",
+  "",
 ].join("\n");
+
+const MONEY_NEW = [
+  "export function formatMoney(value) {",
+  "  return new Intl.NumberFormat(\"es-CO\", { style: \"currency\", currency: \"COP\" }).format(value);",
+  "}",
+  "",
+].join("\n");
+
+const LEGACY_OLD = [
+  "export const LEGACY = true;",
+  "export default LEGACY;",
+  "",
+].join("\n");
+
+const CART_OLD = [
+  "import { formatMoney } from \"./money.js\";",
+  "",
+  "export function cartTotal(items, coupon) {",
+  "  const subtotal = items.reduce((sum, item) => sum + item.price, 0);",
+  "  return subtotal * 1.19;",
+  "}",
+  "",
+  "export function cartSummary(items, coupon) {",
+  "  return formatMoney(cartTotal(items));",
+  "}",
+  "",
+].join("\n");
+
+const CART_NEW = [
+  "import { formatMoney } from \"./money.js\";",
+  "import { couponRate } from \"./coupons.js\";",
+  "",
+  "export function cartTotal(items, coupon) {",
+  "  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);",
+  "  const discount = subtotal * couponRate(coupon);",
+  "  const taxed = (subtotal - discount) * 1.19;",
+  "  return Math.round(taxed);",
+  "}",
+  "",
+  "export function cartSummary(items, coupon) {",
+  "  const total = cartTotal(items, coupon);",
+  "  return {",
+  "    items: items.length,",
+  "    total: formatMoney(total),",
+  "  };",
+  "}",
+  "",
+].join("\n");
+
+const COUPONS_NEW = [
+  "const RATES = Object.freeze({",
+  "  BIENVENIDA: 0.1,",
+  "  AMIGOS: 0.15,",
+  "});",
+  "",
+  "export function couponRate(code) {",
+  "  const key = String(code || \"\").trim().toUpperCase();",
+  "  return RATES[key] || 0;",
+  "}",
+  "",
+].join("\n");
+
+const TEST_OLD = [
+  "import test from \"node:test\";",
+  "import assert from \"node:assert/strict\";",
+  "import { cartTotal } from \"../src/cart.js\";",
+  "test(\"suma los productos\", () => {",
+  "  assert.equal(cartTotal([{ price: 100, qty: 1 }]), 119);",
+  "});",
+  "test(\"pendiente\", () => {});",
+  "",
+].join("\n");
+
+const TEST_NEW = [
+  "import test from \"node:test\";",
+  "import assert from \"node:assert/strict\";",
+  "import { cartTotal } from \"../src/cart.js\";",
+  "test(\"suma los productos\", () => {",
+  "  assert.equal(cartTotal([{ price: 100, qty: 1 }]), 119);",
+  "});",
+  "",
+  "test(\"aplica el cupón antes del IVA\", () => {",
+  "  const items = [{ price: 1000, qty: 2 }];",
+  "  assert.equal(cartTotal(items, \"bienvenida\"), 2142);",
+  "});",
+  "",
+].join("\n");
+
+const FILES = [
+  { sha: COMMITS[0][COMMIT.SHA], path: "src/cart.js", change: "M", old: CART_OLD, new: CART_NEW },
+  { sha: COMMITS[0][COMMIT.SHA], path: "src/coupons.js", change: "A", new: COUPONS_NEW },
+  { sha: COMMITS[0][COMMIT.SHA], path: "test/cart.test.js", change: "M", old: TEST_OLD, new: TEST_NEW },
+  { sha: COMMITS[1][COMMIT.SHA], path: "src/money.js", oldPath: "src/price-utils.js", change: "R", old: PRICE_OLD, new: MONEY_NEW },
+  { sha: COMMITS[1][COMMIT.SHA], path: "src/legacy-price.js", change: "D", old: LEGACY_OLD },
+  { sha: COMMITS[2][COMMIT.SHA], path: "src/summary.js", change: "M", old: SUMMARY_OLD, new: SUMMARY_NEW },
+];
 
 const DIFFS = [
-  { sha: COMMITS[0][COMMIT.SHA], path: "src/cart.js", change: "M", patch: CART_PATCH, label: "Total con descuento", order: "2", to: "test/cart.test.js" },
-  { sha: COMMITS[0][COMMIT.SHA], path: "src/coupons.js", change: "A", patch: COUPON_PATCH, label: "Tasa del cupón", order: "1", to: "src/cart.js" },
-  { sha: COMMITS[0][COMMIT.SHA], path: "test/cart.test.js", change: "M", patch: TEST_PATCH, label: "Prueba el cupón", order: "3" },
-  {
-    sha: COMMITS[1][COMMIT.SHA], path: "src/money.js", oldPath: "src/price-utils.js", change: "R",
-    patch: "@@ -1,11 +1,3 @@\n-export function toCents(value) {\n-  return Math.round(value * 100);\n-}\n-\n-export function fromCents(value) {\n-  return value / 100;\n-}\n-\n export function formatMoney(value) {\n-  return \"$\" + value;\n+  return new Intl.NumberFormat(\"es-CO\", { style: \"currency\", currency: \"COP\" }).format(value);\n }",
-  },
-  { sha: COMMITS[1][COMMIT.SHA], path: "src/legacy-price.js", change: "D", patch: "@@ -1,2 +0,0 @@\n-export const LEGACY = true;\n-export default LEGACY;" },
-  {
-    sha: COMMITS[2][COMMIT.SHA], path: "src/summary.js", change: "M",
-    patch: "@@ -8,4 +8,5 @@ export function renderSummary(order) {\n   const lines = order.items.map((item) => item.name);\n-  const total = \"$\" + order.total;\n-  return lines.concat(total).join(\"\\n\");\n+  const total = formatMoney(order.total);\n+  const header = `Pedido ${order.id}`;\n+  return [header, ...lines, total].join(\"\\n\");\n }\n\\ No newline at end of file",
-  },
   {
     sha: COMMITS[3][COMMIT.SHA], path: "src/confirmed.html", change: "A",
     patch: "@@ -0,0 +1,10 @@\n+<section class=\"confirmed\">\n+  <h1>¡Pedido confirmado!</h1>\n+  <p>Te enviamos el resumen y el número de seguimiento.</p>\n+  <a class=\"btn\" href=\"/\">Volver a la tienda</a>\n+</section>\n+<style>\n+  .confirmed { display: grid; gap: 12px; padding: 24px; }\n+  .confirmed h1 { font-size: 28px; }\n+  .confirmed .btn { justify-self: start; }\n+</style>",
   },
   { sha: COMMITS[3][COMMIT.SHA], path: "assets/check.png", change: "A", patch: "Binary files /dev/null and b/assets/check.png differ" },
-];
-
-const STRUCTURE = [
-  [0, "src/cart.js", "s1", "", "function", "cartTotal", "modified", "4", "(items, coupon)"],
-  [0, "src/cart.js", "s2", "s1", "call", "const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);", "modified", "5", "reduce"],
-  [0, "src/cart.js", "s3", "s1", "return", "return Math.round(taxed);", "modified", "8", ""],
-  [0, "src/cart.js", "s4", "", "function", "cartSummary", "modified", "11", "(items, coupon)"],
-  [0, "src/cart.js", "s5", "s4", "call", "const total = cartTotal(items, coupon);", "added", "12", "cartTotal"],
-  [0, "src/cart.js", "s6", "s4", "return", "return { items: items.length, total: formatMoney(total), };", "modified", "13", ""],
-  [0, "src/coupons.js", "s1", "", "module", "(módulo)", "added", "1", ""],
-  [0, "src/coupons.js", "s2", "s1", "call", "const RATES = Object.freeze({ BIENVENIDA: 0.1, AMIGOS: 0.15, });", "added", "1", "freeze"],
-  [0, "src/coupons.js", "s3", "", "function", "couponRate", "added", "6", "(code)"],
-  [0, "src/coupons.js", "s4", "s3", "call", "const key = String(code || \"\").trim().toUpperCase();", "added", "7", "toUpperCase"],
-  [0, "src/coupons.js", "s5", "s3", "return", "return RATES[key] || 0;", "added", "8", ""],
-  [0, "test/cart.test.js", "s1", "", "module", "(módulo)", "unchanged", "1", ""],
-  [0, "test/cart.test.js", "s2", "s1", "call", "test(\"aplica el cupón antes del IVA\", () => { const items = [{ price: 1000, qty…", "modified", "8", "test"],
-  [0, "test/cart.test.js", "s3", "s1", "call", "assert.equal(cartTotal(items, \"bienvenida\"), 2142);", "added", "10", "equal"],
-  [1, "src/money.js", "s1", "", "function", "toCents", "removed", "1", "(value)"],
-  [1, "src/money.js", "s2", "s1", "return", "return Math.round(value * 100);", "removed", "2", ""],
-  [1, "src/money.js", "s3", "", "function", "formatMoney", "modified", "1", "(value)"],
-  [1, "src/money.js", "s4", "s3", "return", "return new Intl.NumberFormat(\"es-CO\", { style: \"currency\", currency: \"COP\" }).f…", "modified", "2", ""],
-  [1, "src/money.js", "s5", "", "function", "fromCents", "removed", "5", "(value)"],
-  [1, "src/money.js", "s6", "s5", "return", "return value / 100;", "removed", "6", ""],
-  [1, "src/legacy-price.js", "s1", "", "module", "(módulo)", "removed", "1", ""],
-  [2, "src/summary.js", "s1", "", "function", "renderSummary", "modified", "7", "(order)"],
-  [2, "src/summary.js", "s2", "s1", "call", "const total = formatMoney(order.total);", "added", "9", "formatMoney"],
-  [2, "src/summary.js", "s3", "s1", "return", "return [header, ...lines, total].join(\"\\n\");", "modified", "11", ""]
 ];
 
 const REVIEWS = [
@@ -187,25 +241,31 @@ function diffRow(item) {
     [DIFF.CHUNK]: "0",
     [DIFF.CHUNKS]: "1",
     [DIFF.PATCH]: item.patch,
-    [GRAPH.LABEL]: item.label || "",
-    [GRAPH.ORDER]: item.order || "",
-    [GRAPH.TO]: item.to || "",
   };
+}
+
+function fileRows(item) {
+  const base = {
+    [FILE.SHA]: item.sha,
+    [FILE.PATH]: item.path,
+    [FILE.CHANGE]: item.change,
+    [FILE.OLD_PATH]: item.oldPath || "",
+    [FILE.CHUNK]: "0",
+    [FILE.CHUNKS]: "1",
+  };
+  const sides = [[FILE_SIDE.OLD, item.old], [FILE_SIDE.NEW, item.new]].filter(([, text]) => text != null);
+  return sides.map(([side, text]) => ({ ...base, [FILE.SIDE]: side, [FILE.CONTENT]: text }));
 }
 
 function statsFor(sha) {
-  const files = DIFFS.filter((item) => item.sha === sha);
-  const parsed = files.map((item) => parsePatch(item.patch));
+  const files = FILES.filter((item) => item.sha === sha);
+  const patches = DIFFS.filter((item) => item.sha === sha);
+  const parsed = files.map((item) => diffTexts(item.old, item.new)).concat(patches.map((item) => parsePatch(item.patch)));
   return {
-    [COMMIT.FILES]: String(files.length),
+    [COMMIT.FILES]: String(parsed.length),
     [COMMIT.ADDITIONS]: String(parsed.reduce((sum, item) => sum + item.additions, 0)),
     [COMMIT.DELETIONS]: String(parsed.reduce((sum, item) => sum + item.deletions, 0)),
   };
-}
-
-function structureRow([index, ...cells]) {
-  const names = Object.values(NODE).slice(1);
-  return Object.fromEntries([[NODE.SHA, COMMITS[index][COMMIT.SHA]], ...names.map((name, i) => [name, cells[i]])]);
 }
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, DELAY_MS));
@@ -220,7 +280,7 @@ export function createDemoBackend() {
   }));
   const reviews = REVIEWS.map((row) => ({ ...row }));
   const diffs = DIFFS.map(diffRow);
-  const structure = STRUCTURE.map(structureRow);
+  const files = FILES.flatMap(fileRows);
   return {
     demo: true,
     async ping() {
@@ -242,8 +302,8 @@ export function createDemoBackend() {
       return {
         ok: true,
         sha,
+        files: toValues(TAB.FILES, files.filter((row) => row[FILE.SHA] === sha)),
         diffs: toValues(TAB.DIFFS, diffs.filter((row) => row[DIFF.SHA] === sha)),
-        structure: toValues(TAB.STRUCTURE, structure.filter((row) => row[NODE.SHA] === sha)),
       };
     },
     async review(input) {
