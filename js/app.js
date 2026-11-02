@@ -1,6 +1,6 @@
 import {
   APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
-  CONTENT_CHUNK_MAX, HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, NODE, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE,
+  CONTENT_CHUNK_MAX, HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE,
   SCHEMA_VERSION, STATUS, STORAGE, TAB, URLS,
 } from "./config.js";
 import { AppError } from "./errors.js";
@@ -25,6 +25,7 @@ const VIEW = Object.freeze({ GRAPH: "graph", STRUCTURE: "structure" });
 const fillers = new WeakMap();
 const analyses = new WeakMap();
 const OUTLINE_MODULE = "./outline.js";
+const FLOW_MODULE = "./diffgraph/index.js";
 const LOCALE = "es-CO";
 const ROUTE_SEPARATOR = "/";
 const HASH_PREFIX = "#/";
@@ -584,25 +585,6 @@ function analysisFor(table, sha, files) {
   return analyses.get(table);
 }
 
-function structureRows(table, analysis, source) {
-  const agent = table.structure || [];
-  if (!analysis) return { rows: table.structure ?? (table.files ? [] : null), partial: false };
-  const agentPaths = new Set(agent.map((row) => row[NODE.PATH]));
-  const seen = new Set();
-  const rows = [];
-  let partial = false;
-  for (const file of analysis.files) {
-    seen.add(file.path);
-    if (file.source !== source.FULL && agentPaths.has(file.path)) {
-      rows.push(...agent.filter((row) => row[NODE.PATH] === file.path));
-      continue;
-    }
-    rows.push(...file.rows);
-    partial = partial || file.partial;
-  }
-  return { rows: rows.concat(agent.filter((row) => !seen.has(row[NODE.PATH]))), partial };
-}
-
 function filesSection(commit) {
   clearGraph();
   const wrap = setting(STORAGE.WRAP) !== "0";
@@ -652,9 +634,9 @@ function filesSection(commit) {
           button: structBtn,
           make: async () => {
             const analysis = await analysisFor(table, sha, files);
-            const { SOURCE } = await import(OUTLINE_MODULE);
-            const { rows, partial } = structureRows(table, analysis, SOURCE);
-            return structurePanel(rows, { onOpen, partial });
+            if (!analysis && !table.structure && !table.files) return structurePanel(null, { onOpen });
+            const [{ SOURCE }, { buildFlow }] = await Promise.all([import(OUTLINE_MODULE), import(FLOW_MODULE)]);
+            return structurePanel(await buildFlow(analysis, table.structure, SOURCE), { onOpen });
           },
         },
       };

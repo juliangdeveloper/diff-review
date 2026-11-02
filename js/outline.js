@@ -68,7 +68,7 @@ function compact(text, max = SNIPPET_MAX) {
   return single.length <= max ? single : `${single.slice(0, max - 1)}…`;
 }
 
-function hash(text) {
+export function textHash(text) {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i += 1) {
@@ -107,7 +107,7 @@ function source(text, tree) {
     text,
     of: (node) => text.slice(node.from, node.to),
     span: (from, to) => text.slice(from, to),
-    sig: (node) => hash(clean.slice(node.from, node.to).replace(/\s+/g, "")),
+    sig: (node) => textHash(clean.slice(node.from, node.to).replace(/\s+/g, "")),
     line(pos) {
       let lo = 0;
       let hi = starts.length - 1;
@@ -430,13 +430,18 @@ function analyzePy(src, tree) {
   return { nodes, imports, calls };
 }
 
-export async function analyzeSource(text, path) {
-  if (text == null) return { nodes: [], imports: [], calls: new Set() };
+export async function parseText(text, path) {
+  if (text == null) return null;
   const found = await parserFor(path);
-  if (!found) return { nodes: [], imports: [], calls: new Set() };
+  if (!found) return null;
   const tree = found.parser.parse(text);
-  const src = source(text, tree);
-  return found.lang === LANG.PY ? analyzePy(src, tree) : analyzeJs(src, tree);
+  return { lang: found.lang, tree, src: source(text, tree) };
+}
+
+export async function analyzeSource(text, path) {
+  const parsed = await parseText(text, path);
+  if (!parsed) return { nodes: [], imports: [], calls: new Set() };
+  return parsed.lang === LANG.PY ? analyzePy(parsed.src, parsed.tree) : analyzeJs(parsed.src, parsed.tree);
 }
 
 function prepare(nodes) {
@@ -789,7 +794,8 @@ async function fromContent(sha, file) {
   if (!supported(file)) return listResult(sha, file, parsed, false);
   const before = await analyzeSource(file.old, file.oldPath || file.path);
   const after = await analyzeSource(file.new, file.path);
-  return withList(outlineResult(sha, file, before, after, SOURCE.FULL, false), listResult(sha, file, parsed, false));
+  const sides = { old: file.old ?? null, new: file.new ?? null, oldPath: file.oldPath || file.path, oldShown: null, newShown: null };
+  return { ...withList(outlineResult(sha, file, before, after, SOURCE.FULL, false), listResult(sha, file, parsed, false)), sides, flowSource: SOURCE.FULL };
 }
 
 async function fromPatch(sha, file, patch) {
@@ -804,7 +810,7 @@ async function fromPatch(sha, file, patch) {
     const shown = row[NODE.STATUS] === NODE_STATUS.REMOVED ? sides.oldShown : sides.newShown;
     row[NODE.LINE] = String(nearest(shown, Number.parseInt(row[NODE.LINE], 10) || 0) || "");
   }
-  return withList(result, listResult(sha, file, parsed, !whole));
+  return { ...withList(result, listResult(sha, file, parsed, !whole)), sides: { ...sides, oldPath: file.oldPath || file.path }, flowSource: SOURCE.PATCH };
 }
 
 function withList(result, list) {

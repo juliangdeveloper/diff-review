@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.4.1";
+export const APP_VERSION = "0.5.0";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
