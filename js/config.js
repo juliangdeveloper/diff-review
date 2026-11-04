@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.5.1";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
@@ -9,6 +9,15 @@ export const PORTFOLIO = Object.freeze({
     fase_estado: 1,
     fases_completadas: 3,
     objetivo: "Open source para revisar diffs de commits en el celular y aprobar, rechazar o comentar.",
+    aportes: [
+      { id: "programacion", aporte: 3, fuente: "creacion" },
+      { id: "ux", aporte: 2, fuente: "creacion" },
+      { id: "datos", aporte: 2, fuente: "creacion" },
+      { id: "algoritmos", aporte: 2, fuente: "creacion" },
+      { id: "disciplina", aporte: 2, fuente: "uso" },
+      { id: "atencion", aporte: 2, fuente: "uso" },
+      { id: "lectura", aporte: 2, fuente: "uso" }
+    ],
   }),
 });
 export const SCHEMA_VERSION = 3;
