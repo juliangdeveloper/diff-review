@@ -1,5 +1,5 @@
 import {
-  APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, DEMO_ON, DEMO_PARAM, ERROR, FILTER_ALL,
+  APP_ID, APP_VERSION, AUTO_OPEN_MAX_FILES, COMMIT, DECISION, DECISION_STATUS, ERROR, FILTER_ALL,
   CONTENT_CHUNK_MAX, HEADERS, LABEL, LARGE_FILE_LINES, MESSAGE_PREVIEW_CHARS, PORTFOLIO, PORTFOLIO_PREFIX, REVIEW, ROUTE,
   SCHEMA_VERSION, STATUS, STORAGE, TAB, URLS,
 } from "./config.js";
@@ -8,7 +8,6 @@ import { checkSchema, parseDiffs, parseLoad } from "./sheets.js";
 import {
   cleanLegacy, clearConnection, connectionError, createScriptBackend, loadConnection, saveConnection,
 } from "./script.js";
-import { createDemoBackend } from "./demo.js";
 import { aiPrompt } from "./prompt.js";
 import { parsePatch, renderLines } from "./diff.js";
 import { diffTexts } from "./linediff.js";
@@ -75,7 +74,6 @@ const SETUP_STEPS = Object.freeze([
   ["Conecta la app.", "En Ajustes pega la URL y la clave y pulsa Probar conexión. La hoja se llama diff-review y recibe sus pestañas y columnas sola."],
   ["Si cambias Code.gs.", "Implementar → Gestionar implementaciones → Editar → Nueva versión. La URL no cambia."],
 ]);
-const DEMO = new URLSearchParams(location.search).get(DEMO_PARAM) === DEMO_ON;
 
 function safeStorage(name) {
   try {
@@ -99,7 +97,6 @@ cleanLegacy(safeStorage("localStorage"), safeStorage("sessionStorage"));
 savePortfolio();
 
 function startBackend() {
-  if (DEMO) return createDemoBackend();
   const saved = loadConnection(safeStorage("localStorage"));
   return saved ? createScriptBackend(saved) : null;
 }
@@ -493,8 +490,7 @@ async function submitReview(commit, decision, form) {
         .filter((c) => c[COMMIT.SHA] === commit[COMMIT.SHA] && c[COMMIT.BRANCH] === commit[COMMIT.BRANCH])
         .forEach((c) => { c[COMMIT.STATUS] = next; });
     }
-    const where = state.backend.demo ? "en la demo" : "en la hoja";
-    toast(status ? `${LABEL.status[status]} y guardado ${where}.` : `Comentario guardado ${where}.`);
+    toast(status ? `${LABEL.status[status]} y guardado en la hoja.` : "Comentario guardado en la hoja.");
     textarea.value = "";
     render();
   } catch (err) {
@@ -917,12 +913,6 @@ function forgetConnection() {
 }
 
 function connectionSection() {
-  if (DEMO) {
-    return h("div", { class: "card form" },
-      h("p", { class: "muted", text: "Estás en la demo: usa datos de ejemplo y las revisiones quedan solo en esta pestaña." }),
-      h("a", { class: "btn primary", href: location.pathname, text: "Salir de la demo" }),
-      setupRow("setup-open"));
-  }
   const saved = loadConnection(safeStorage("localStorage"));
   const url = h("input", {
     id: "conn-url", type: "url", inputmode: "url", autocomplete: "off", spellcheck: "false",
@@ -1004,7 +994,6 @@ document.getElementById("setup-close").addEventListener("click", () => document.
 document.getElementById("setup").addEventListener("click", (e) => {
   if (e.target.id === "setup") e.target.close();
 });
-document.getElementById("demo-badge").hidden = !DEMO;
 document.getElementById("bar-version").textContent = `v${APP_VERSION}`;
 if (configured()) refresh();
 if ("serviceWorker" in navigator) {

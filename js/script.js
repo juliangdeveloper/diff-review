@@ -93,7 +93,6 @@ export function createScriptBackend(connection) {
     body: JSON.stringify({ key: connection.key, action, ...payload }),
   });
   return {
-    demo: false,
     ping: () => post(ACTION.PING),
     load: () => post(ACTION.LOAD),
     diffs: (sha) => post(ACTION.DIFFS, { sha }),
