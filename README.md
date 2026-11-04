@@ -4,9 +4,9 @@
 
 > Revisa desde el celular los commits que tu agente de IA escribe en tu propia hoja de Google: lee el diff y aprueba, rechaza o comenta.
 
-**[▶ Ver demo](https://juliangdeveloper.github.io/diff-review/?demo=1)** · datos de ejemplo, sin conectar nada
+**[▶ Abrir la app](https://juliangdeveloper.github.io/diff-review/)**
 
-<img src="assets/screenshot.png" alt="Diff de un commit en diff-review con los botones para aprobar, rechazar o comentar" width="320">
+<img src="assets/screenshot.png" alt="Lista de commits en diff-review con su estado de revisión" width="320">
 
 ```mermaid
 flowchart LR
@@ -60,12 +60,13 @@ Con ese contenido la app calcula en el navegador el diff unificado y las líneas
 
 ## Stack
 JavaScript vanilla (módulos ES), service worker para uso offline y Google Apps Script como backend. Sin bundler ni paso de build: el analizador de código es [Lezer](https://lezer.codemirror.net/) (licencia MIT, de Marijn Haverbeke), copiado ya minificado en [`js/vendor/lezer`](js/vendor/lezer) con su [aviso de licencia](js/vendor/lezer/LICENSE), y el diagrama de **Estructura** se ordena con [dagre](https://github.com/dagrejs/dagre) (licencia MIT, de Chris Pettitt), copiado sin cambios en [`js/vendor/dagre`](js/vendor/dagre) con su [aviso de licencia](js/vendor/dagre/LICENSE).
+Al abrirse guarda el progreso en `localStorage` (`meta.v1.diff-review`), que lee el [portafolio](https://juliangdeveloper.github.io/).
 
 ```
-python3 -m http.server 8000   # abrir http://localhost:8000/?demo=1
+python3 -m http.server 8000   # abrir http://localhost:8000
 ```
 
-Versión actual: `diff-review v0.5.1`.
+Versión actual: `diff-review v0.5.2`.
 
 Licencia: [MIT](LICENSE).
 

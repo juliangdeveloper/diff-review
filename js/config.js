@@ -1,5 +1,5 @@
 export const APP_ID = "diff-review";
-export const APP_VERSION = "0.5.1";
+export const APP_VERSION = "0.5.2";
 export const PORTFOLIO_PREFIX = "meta.v1.";
 export const PORTFOLIO = Object.freeze({
   v: 1,
@@ -10,13 +10,9 @@ export const PORTFOLIO = Object.freeze({
     fases_completadas: 3,
     objetivo: "Open source para revisar diffs de commits en el celular y aprobar, rechazar o comentar.",
     aportes: [
-      { id: "programacion", aporte: 3, fuente: "creacion" },
-      { id: "ux", aporte: 2, fuente: "creacion" },
-      { id: "datos", aporte: 2, fuente: "creacion" },
-      { id: "algoritmos", aporte: 2, fuente: "creacion" },
-      { id: "disciplina", aporte: 2, fuente: "uso" },
-      { id: "atencion", aporte: 2, fuente: "uso" },
-      { id: "lectura", aporte: 2, fuente: "uso" }
+      { stat: "Programación", exp: 60, fuente: "creacion" },
+      { stat: "Diseño", exp: 8, fuente: "creacion" },
+      { stat: "Revisión de código", exp: 20, fuente: "uso" }
     ],
   }),
 });
@@ -74,8 +70,6 @@ export const ERROR = Object.freeze({
   SERVER: "server",
 });
 
-export const DEMO_PARAM = "demo";
-export const DEMO_ON = "1";
 
 export const TAB = Object.freeze({
   COMMITS: "commits",
